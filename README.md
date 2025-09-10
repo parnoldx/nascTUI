@@ -23,19 +23,9 @@ NaSC is an app where you do maths like a normal person. It lets you type whateve
 
 ## Installation
 
-### From Source
-
-Make sure you have Go 1.21+ and libqalculate development libraries installed:
-
-#### Ubuntu/Debian
-```bash
-sudo apt install libqalculate-dev
-go install github.com/parnoldx/nascTUI@latest
-```
-
 #### Arch Linux
 ```bash
-sudo pacman -S libqalculate
+sudo pacman -S go libqalculate pkgconf gcc
 go install github.com/parnoldx/nascTUI@latest
 ```
 ### Building from Source

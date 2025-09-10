@@ -17,7 +17,7 @@ jobs:
     - name: Install dependencies
       run: |
         pacman -Syu --noconfirm
-        pacman -S --noconfirm go libqalculate pkg-config
+        pacman -S --noconfirm go libqalculate pkgconf gcc
 
     - name: Download dependencies
       working-directory: ./src
