@@ -1,0 +1,36 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  arch-build:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        pacman -Syu --noconfirm
+        pacman -S --noconfirm go libqalculate pkg-config
+
+    - name: Download dependencies
+      working-directory: ./src
+      run: go mod download
+
+    - name: Verify dependencies
+      working-directory: ./src
+      run: go mod verify
+
+    - name: Build
+      working-directory: ./src
+      run: go build -v ./...
+
+    - name: Test
+      working-directory: ./src
+      run: go test -v ./...
