@@ -1,0 +1,10 @@
+2 + 2                 // All the math you need
+ans * 3                 // Uses previous result (ans)
+sqrt(16)              // Use functions
+ans2 + ans3                // References previous results
+solve(2x = ans)        // Advances functions
+50$ to €              // Currency conversion
+a = 5cm               // Variable assignment
+a * a                 // Calculates area using the variable
+ans to in       // Unit conversion
+Have fun

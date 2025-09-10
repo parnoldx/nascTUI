@@ -1,0 +1,46 @@
+NaSC - TUI Calculator
+
+OVERVIEW:
+NaSC is a Terminal User Interface calculator powered by libqalculate. 
+It provides a multi-line calculator interface with support for 
+mathematical expressions, units, currencies, and more.
+
+KEYBOARD SHORTCUTS:
+  Ctrl+H        Show/hide this help
+  ↑/↓           Navigate between lines
+  Enter         Add new input line
+  Ctrl+D        Delete focused line
+  Ctrl+N        New calculation sheet
+  Esc           Close help / Quit app
+  Ctrl+C        Quit app
+
+  Tab           Show completion popup
+  Ctrl+Space    Show completion popup
+  Ctrl+L        GoTo line
+  Ctrl+P        Insert π symbol
+  Ctrl+R        Insert √ symbol  
+  Ctrl+A        Insert "ans" (Last Answer)
+
+BASIC USAGE:
+• Type mathematical expressions and see results instantly
+• Use Enter to create new lines
+• Reference previous results with 'ans' or 'ans1', 'ans2', etc.
+• Click on results to insert answer references
+
+EXAMPLES:
+  2 + 2                    → 4
+  ans * 5                  → 20
+  sin(45°)                 → 0.707...
+  100 USD to EUR           → Currency conversion
+  5 feet to meters         → Unit conversion
+  solve(2x = 10)           → Equation solving
+
+FEATURES:
+• Arithmetic: +, -, *, /, ^, %, sqrt(), etc.
+• Trigonometry: sin(), cos(), tan(), asin(), etc.
+• Units: Convert between length, weight, temperature, etc.
+• Currencies: Real-time exchange rates
+• Constants: pi, e, c (speed of light), etc.
+• Functions: log(), ln(), abs(), round(), etc.
+• Answer references: ans, ans1, ans2, etc.
+
