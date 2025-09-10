@@ -62,8 +62,12 @@ func (m *Model) updateInputViewport() {
 			// Style ans/res tokens with boxes
 			inputView := input.View()
 			inputView = m.styleAnsTokens(inputView)
+			renderWidth := m.InputViewport.Width - 6
+			if renderWidth < 1 {
+				renderWidth = 1
+			}
 			inputView = lipgloss.NewStyle().
-				Width(m.InputViewport.Width - 6).
+				Width(renderWidth).
 				Render(inputView)
 			combined := lipgloss.JoinHorizontal(lipgloss.Top, gutter, " ", inputView)
 

@@ -38,11 +38,19 @@ type Model struct {
 }
 
 func (m Model) GetTextInputWidth() int {
-	return int(float64(m.Width)*0.7) - 6
+	width := int(float64(m.Width)*0.7) - 6
+	if width < 1 {
+		return 1
+	}
+	return width
 }
 
 func GetTextInputWidth(width int) int {
-	return int(float64(width)*0.7) - 6
+	calcWidth := int(float64(width)*0.7) - 6
+	if calcWidth < 1 {
+		return 1
+	}
+	return calcWidth
 }
 
 func InitialModel() Model {

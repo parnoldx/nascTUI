@@ -76,12 +76,35 @@ func (m *Model) scrollToFocused() {
 func (m *Model) handleWindowResize(msg tea.WindowSizeMsg) {
 	m.Width = msg.Width
 	m.Height = msg.Height
-	m.InputViewport.Width = int(float64(m.Width)*0.7) - 2
-	m.InputViewport.Height = m.Height - 2
-	m.ResultViewport.Width = int(float64(m.Width)*0.3) - 2
-	m.ResultViewport.Height = m.Height - 2
+	
+	// Ensure minimum viable viewport widths
+	inputWidth := int(float64(m.Width)*0.7) - 2
+	if inputWidth < 1 {
+		inputWidth = 1
+	}
+	m.InputViewport.Width = inputWidth
+	
+	resultWidth := int(float64(m.Width)*0.3) - 2
+	if resultWidth < 1 {
+		resultWidth = 1
+	}
+	m.ResultViewport.Width = resultWidth
+	
+	// Ensure minimum viable viewport heights
+	viewportHeight := m.Height - 2
+	if viewportHeight < 1 {
+		viewportHeight = 1
+	}
+	m.InputViewport.Height = viewportHeight
+	m.ResultViewport.Height = viewportHeight
+	
+	// Update input widths with safety check
 	for i := range m.Inputs {
-		m.Inputs[i].Width = m.InputViewport.Width - 6 // Account for gutter
+		inputFieldWidth := m.InputViewport.Width - 6
+		if inputFieldWidth < 1 {
+			inputFieldWidth = 1
+		}
+		m.Inputs[i].Width = inputFieldWidth
 	}
 }
 
