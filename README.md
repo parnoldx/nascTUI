@@ -23,16 +23,9 @@ NaSC is an app where you do maths like a normal person. It lets you type whateve
 
 ## Installation
 
-#### Arch Linux
+#### Linux
 ```bash
-sudo pacman -S go libqalculate pkgconf gcc
-go install github.com/parnoldx/nascTUI@latest
-```
-### Building from Source
-```bash
-git clone https://github.com/parnoldx/nascTUI.git
-cd nascTUI/src
-go build -o nasc
+bash -c "$(curl -sLo- https://raw.githubusercontent.com/parnoldx/nascTUI/refs/heads/master/install.sh)"
 ```
 
 ## Usage
