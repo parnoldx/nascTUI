@@ -28,7 +28,7 @@ jobs:
     - name: Build binaries
       working-directory: ./src
       run: |
-        GOOS=linux GOARCH=amd64 go build -v ./...
+        GOOS=linux GOARCH=amd64 go build -o ../nasc -v ./...
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
