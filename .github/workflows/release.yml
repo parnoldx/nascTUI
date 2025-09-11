@@ -31,11 +31,15 @@ jobs:
         # Linux AMD64
         GOOS=linux GOARCH=amd64 go build -o ../nasc-linux-amd64 -v .
 
+        # Linux ARM64
+        GOOS=linux GOARCH=arm64 go build -o ../nasc-linux-arm64 -v .
+
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
         files: |
           nasc-linux-amd64
+          nasc-linux-arm64
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
