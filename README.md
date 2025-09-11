@@ -1,4 +1,3 @@
-<div align="center">
 
 ```
   _   _        _____  _____ 
@@ -9,9 +8,8 @@
  |_| \_|\__,_|_____/ \_____|
 
 ```               
+<h3>🧮 Do maths like a normal person 🧮</h3>
 
-  <h3 align="center">🧮 Do maths like a normal person 🧮</h3>
-</div>
 
 ![NASC TUI Demo](demo.gif)
 
