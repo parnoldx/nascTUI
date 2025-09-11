@@ -40,9 +40,6 @@ case $ARCH in
     x86_64|amd64)
         ARCH="amd64"
         ;;
-    arm64|aarch64)
-        ARCH="arm64"
-        ;;
     *)
         echo -e "${RED}Unsupported architecture: $ARCH${NC}"
         exit 1
@@ -175,8 +172,6 @@ fi
 # Make executable
 chmod +x nasc
 
-# Install binary
-echo -e "${CYAN}Installing binary...${NC}"
 if [ "$INSTALL_DIR" = "/usr/local/bin" ] && [ "$EUID" -ne 0 ]; then
     if sudo cp nasc "$INSTALL_DIR/nasc"; then
         echo -e "${GREEN}✓ Installed to $INSTALL_DIR${NC}"
@@ -194,15 +189,15 @@ fi
 
 # Test if command is available
 if command_exists nasc; then
+    echo
+    echo -e "${GREEN}🎉 NaSC installation complete!${NC}"
+    echo
+    echo -e "${CYAN}Usage:${NC}"
+    echo -e "${CYAN}  nasc${NC}"
 else
     echo -e "${YELLOW}⚠ nasc command not found in PATH${NC}"
     echo -e "${YELLOW}You may need to restart your shell or run:${NC}"
     echo -e "${YELLOW}  source ~/.bashrc  # or ~/.zshrc${NC}"
-    exit 1
 fi
 
-echo
-echo -e "${GREEN}🎉 NaSC installation complete!${NC}"
-echo
-echo -e "${CYAN}Usage:${NC}"
-echo -e "${CYAN}  nasc                    # Start interactive calculator${NC}"
+
