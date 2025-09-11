@@ -29,10 +29,10 @@ jobs:
       working-directory: ./src
       run: |
         # Linux AMD64
-        GOOS=linux GOARCH=amd64 go build -o ../nasc-linux-amd64 -v .
+        GOOS=linux GOARCH=amd64 go build -v ./... && mv ../nasc ./nasc-linux-amd64
 
         # Linux ARM64
-        GOOS=linux GOARCH=arm64 go build -o ../nasc-linux-arm64 -v .
+        GOOS=linux GOARCH=arm64 go build -v ./... && mv ../nasc ./nasc-linux-arm64
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
