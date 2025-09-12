@@ -35,10 +35,11 @@ type Model struct {
 	UndoSystem     *UndoSystem
 	ShowGoToLine   bool
 	GoToLineInput  textinput.Model
+	LastResultContent string
 }
 
 func (m Model) GetTextInputWidth() int {
-	width := int(float64(m.Width)*0.7) - 6
+	width := int(float64(m.Width)*0.7) - 6 - 3  // -3 for early scrolling
 	if width < 1 {
 		return 1
 	}
@@ -46,7 +47,7 @@ func (m Model) GetTextInputWidth() int {
 }
 
 func GetTextInputWidth(width int) int {
-	calcWidth := int(float64(width)*0.7) - 6
+	calcWidth := int(float64(width)*0.7) - 6 - 3  // -3 for early scrolling
 	if calcWidth < 1 {
 		return 1
 	}

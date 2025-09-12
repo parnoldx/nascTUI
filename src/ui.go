@@ -73,22 +73,59 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if currentExpr == "" {
 			// Clear result when input is empty
 			m.Results[m.Focused] = ""
-			m.updateViewports()
+			// Only update input viewport to avoid result pane flickering
+			m.updateInputViewport()
 		}
 	}
 
-	// Update viewport components normally but prevent feedback during resize
+	// Minimal viewport updates to prevent flickering
 	var inputCmd, resultCmd tea.Cmd
-	m.InputViewport, inputCmd = m.InputViewport.Update(msg)
-	m.ResultViewport, resultCmd = m.ResultViewport.Update(msg)
-	cmds = append(cmds, inputCmd, resultCmd)
+	switch msg.(type) {
+	case tea.WindowSizeMsg:
+		// Allow viewport updates for resize events
+		m.InputViewport, inputCmd = m.InputViewport.Update(msg)
+		m.ResultViewport, resultCmd = m.ResultViewport.Update(msg)
+		cmds = append(cmds, inputCmd, resultCmd)
+	case tea.MouseMsg:
+		// Allow input viewport updates for mouse events
+		m.InputViewport, inputCmd = m.InputViewport.Update(msg)
+		cmds = append(cmds, inputCmd)
+	case tickMsg:
+		// Completely ignore tick messages for viewport updates
+	default:
+		// For all other messages, suppress viewport component updates to prevent flickering
+		// The viewports will be updated through our manual updateViewports() calls
+		
+		// Also filter out textinput blink commands that cause flickering
+		switch msgTyped := msg.(type) {
+		case tea.KeyMsg:
+			if msgTyped.Type == tea.KeySpace {
+				// Allow space key updates
+			}
+		}
+	}
 
-	// Only update viewports if not showing completions and not during resize
+	// Only update viewports for specific message types to prevent flickering
 	if !m.ShowCompletions {
 		switch msg.(type) {
-		case tea.WindowSizeMsg:
-			// Don't update viewports during resize - let bubbletea handle it
+		case tea.WindowSizeMsg, tickMsg:
+			// Don't update viewports during resize or tick - prevents flickering
+		case CalculationMsg:
+			// Update viewports when calculation results change
+			m.updateViewports()
+		case tea.KeyMsg:
+			// Only update input viewport during typing, not result viewport
+			keyMsg := msg.(tea.KeyMsg)
+			switch keyMsg.Type {
+			case tea.KeyUp, tea.KeyDown, tea.KeyCtrlK, tea.KeyCtrlJ:
+				// Update viewports for navigation commands
+				m.updateViewports()
+			default:
+				// For regular typing, only update input viewport
+				m.updateInputViewport()
+			}
 		default:
+			// For other messages (mouse, paste, etc.), update both viewports
 			m.updateViewports()
 		}
 	}

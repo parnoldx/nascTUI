@@ -32,6 +32,15 @@ import (
 	"unsafe"
 )
 
+// Constants for configuration values
+const (
+	CalculationTimeout     = 5 * time.Second  // Timeout for calculations
+	MinVariableNameLength  = 3                // Minimum length for variable name matching
+	ErrorCalculationFailed = "Calculation failed"
+	ErrorExpressionInvalid = "Invalid expression"
+	ErrorTimeout          = "Calculation timeout"
+)
+
 var operators = []string{"+", "-", "*", "/", "=", "(", ")"}
 
 // Cache for libqalculate completions to avoid expensive C calls on every request
@@ -114,7 +123,7 @@ func (cm *CalculationManager) StartCalculation(index int, expr string) context.C
 	}
 	
 	// Create new context for this calculation
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), CalculationTimeout)
 	cm.running[index] = cancel
 	cm.calculating[index] = true
 	
@@ -214,10 +223,10 @@ func CheckForCalculation(input string) bool {
 		}
 	}
 	
-	// Check for variable usage (length > 3)
+	// Check for variable usage (length > MinVariableNameLength)
 	_, allVariables := getLibqalculateCompletions()
 	for _, variable := range allVariables {
-		if len(variable) > 3 && strings.Contains(input, variable) {
+		if len(variable) > MinVariableNameLength && strings.Contains(input, variable) {
 			return true
 		}
 	}
@@ -372,14 +381,28 @@ func CalculateExpression(expr string, results []string, currentIndex int) string
 	
 	cResult := C.calculate_expression(cExpr)
 	if cResult == nil {
-		return "Error"
+		return ErrorCalculationFailed
 	}
 	defer C.free_result(cResult)
 	
 	rawResult := C.GoString(cResult)
 	
+	// Check for common error patterns in the result
+	if rawResult == "" {
+		return ErrorExpressionInvalid
+	}
+	
+	trimmedResult := strings.TrimSpace(rawResult)
+	
+	// Check for libqalculate error indicators
+	if strings.Contains(strings.ToLower(trimmedResult), "error") ||
+	   strings.Contains(strings.ToLower(trimmedResult), "undefined") ||
+	   strings.Contains(strings.ToLower(trimmedResult), "invalid") {
+		return trimmedResult // Return the actual error message from libqalculate
+	}
+	
 	// Postprocess the result
-	result := postString(strings.TrimSpace(rawResult))
+	result := postString(trimmedResult)
 	return result
 }
 
@@ -387,6 +410,9 @@ func CalculateExpressionWithContext(ctx context.Context, expr string, results []
 	// Check if context was cancelled before starting
 	select {
 	case <-ctx.Done():
+		if ctx.Err() == context.DeadlineExceeded {
+			return ErrorTimeout
+		}
 		return ""
 	default:
 	}
@@ -416,13 +442,13 @@ func getLibqalculateCompletions() ([]string, []string) {
 		cName := C.get_function_name(C.int(i))
 		cCategory := C.get_function_category(C.int(i))
 		if cName != nil {
+			defer C.free_result(cName)
 			func_name := C.GoString(cName)
 			category := ""
 			if cCategory != nil {
+				defer C.free_result(cCategory)
 				category = C.GoString(cCategory)
-				C.free_result(cCategory)
 			}
-			C.free_result(cName)
 			if  func_name == "" || category == "" {
                 continue;
     		}
@@ -459,13 +485,13 @@ func getLibqalculateCompletions() ([]string, []string) {
 		cName := C.get_variable_name(C.int(i))
 		cCategory := C.get_variable_category(C.int(i))
 		if cName != nil {
+			defer C.free_result(cName)
 			name := C.GoString(cName)
 			category := ""
 			if cCategory != nil {
+				defer C.free_result(cCategory)
 				category = C.GoString(cCategory)
-				C.free_result(cCategory)
 			}
-			C.free_result(cName)
 			
 			if name == "" || category == "" || category == "Temporary" || category == "Unknowns" || category == "Large Numbers" ||
                 category == "Small Numbers" {

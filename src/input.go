@@ -82,7 +82,7 @@ func (m *Model) openHelp() (tea.Model, tea.Cmd) {
 	m.HelpViewport.Width = helpWidth
 	m.HelpViewport.Height = helpHeight
 	m.HelpViewport.SetContent(helpText)
-	return *m, nil
+	return *m, textinput.Blink
 }
 
 // deleteLine deletes the current line or clears content if it's the only line
@@ -274,7 +274,7 @@ func (m *Model) handleBracketedPaste(pastedContent string) (tea.Model, tea.Cmd) 
 		return *m, tea.Batch(cmds...)
 	}
 	// Single-line paste falls through to normal textinput processing
-	return *m, nil
+	return *m, textinput.Blink
 }
 
 // openGoToLine opens the go-to-line input dialog
@@ -282,7 +282,7 @@ func (m *Model) openGoToLine() (tea.Model, tea.Cmd) {
 	m.ShowGoToLine = true
 	m.GoToLineInput.SetValue("")
 	m.GoToLineInput.Focus()
-	return *m, nil
+	return *m, textinput.Blink
 }
 
 // goToLine jumps to the specified line number
@@ -294,14 +294,14 @@ func (m *Model) goToLine() (tea.Model, tea.Cmd) {
 	m.GoToLineInput.Blur()
 	
 	if lineInput == "" {
-		return *m, nil
+		return *m, textinput.Blink
 	}
 	
 	// Parse line number
 	lineNumber, err := strconv.Atoi(lineInput)
 	if err != nil || lineNumber < 1 {
 		// Invalid line number, do nothing
-		return *m, nil
+		return *m, textinput.Blink
 	}
 	
 	// Convert to 0-based index
@@ -330,5 +330,5 @@ func (m *Model) cancelGoToLine() (tea.Model, tea.Cmd) {
 	m.ShowGoToLine = false
 	m.GoToLineInput.SetValue("")
 	m.GoToLineInput.Blur()
-	return *m, nil
+	return *m, textinput.Blink
 }

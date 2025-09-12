@@ -59,16 +59,11 @@ func (m *Model) updateInputViewport() {
 				Bold(true).
 				Render(gutter)
 
-			// Style ans/res tokens with boxes
+			// Style ans/res tokens with boxes and let textinput handle its own width
 			inputView := input.View()
 			inputView = m.styleAnsTokens(inputView)
-			renderWidth := m.InputViewport.Width - 6
-			if renderWidth < 1 {
-				renderWidth = 1
-			}
-			inputView = lipgloss.NewStyle().
-				Width(renderWidth).
-				Render(inputView)
+			
+			// Don't constrain the input view - let it handle its own scrolling
 			combined := lipgloss.JoinHorizontal(lipgloss.Top, gutter, " ", inputView)
 
 			// Add completion popup after focused line if showing completions
@@ -80,6 +75,16 @@ func (m *Model) updateInputViewport() {
 		} else {
 			// Replace ans tokens with highlighted actual values on non-focused lines
 			displayLine := m.replaceAnsTokensWithValues(line, i)
+			
+			// Simple truncation for non-focused lines to prevent layout issues
+			maxDisplayWidth := m.GetTextInputWidth()
+			if lipgloss.Width(displayLine) > maxDisplayWidth {
+				plainText := stripANSIEscapeCodes(displayLine)
+				if len(plainText) > maxDisplayWidth-3 {
+					displayLine = plainText[:maxDisplayWidth-3] + "..."
+				}
+			}
+			
 			// Don't style non-focused gutters - use default colors
 			combined := lipgloss.JoinHorizontal(lipgloss.Top, gutter, " ", displayLine)
 			inputLines = append(inputLines, combined)
@@ -93,31 +98,41 @@ func (m *Model) updateResultViewport() {
 	var resultLines []string
 	for i := range m.Inputs {
 		result := m.Results[i]
-
-		// Constrain result to fit in result pane width
-		if len(result) > m.ResultViewport.Width && m.ResultViewport.Width > 3 {
-			result = result[:m.ResultViewport.Width-3] + "..."
-		} else if len(result) > m.ResultViewport.Width && m.ResultViewport.Width > 0 {
-			result = result[:m.ResultViewport.Width]
+		
+		// Simple truncation for results to prevent layout issues (same as input lines)
+		maxResultWidth := m.ResultViewport.Width
+		if maxResultWidth <= 0 {
+			maxResultWidth = 20 // Fallback width
+		}
+		
+		// First strip any existing ANSI codes to get plain text for length calculation
+		plainResult := stripANSIEscapeCodes(result)
+		if len(plainResult) > maxResultWidth {
+			result = plainResult[:maxResultWidth] + "…"
 		}
 
-		// Ensure positive width for lipgloss
+		// Get result width for padding
 		resultWidth := m.ResultViewport.Width
 		if resultWidth <= 0 {
 			resultWidth = 20 // Minimum fallback width
 		}
-
+		
 		if i == m.Focused {
 			result = lipgloss.NewStyle().
 				Foreground(m.Theme.focusedColor).
 				Bold(true).
-				Width(resultWidth).
 				Render(result)
 		} else {
 			result = lipgloss.NewStyle().
-				Width(resultWidth).
 				Render(result)
 		}
+		
+		// Pad with spaces to fill viewport width and maintain layout
+		resultVisualWidth := lipgloss.Width(result)
+		if resultVisualWidth < resultWidth {
+			result += strings.Repeat(" ", resultWidth-resultVisualWidth)
+		}
+		
 		resultLines = append(resultLines, result)
 
 		// Add empty lines to match completion popup height
@@ -128,7 +143,13 @@ func (m *Model) updateResultViewport() {
 			}
 		}
 	}
-	m.ResultViewport.SetContent(strings.Join(resultLines, "\n"))
+	
+	// Only update result viewport if content actually changed
+	newContent := strings.Join(resultLines, "\n")
+	if newContent != m.LastResultContent {
+		m.ResultViewport.SetContent(newContent)
+		m.LastResultContent = newContent
+	}
 }
 
 // renderCompletionPopup creates the completion popup lines
@@ -245,6 +266,14 @@ func (m *Model) replaceAnsTokensWithValues(line string, currentIndex int) string
 	return displayLine + commentPart
 }
 
+
+// stripANSIEscapeCodes removes ANSI escape codes from text to get plain length
+func stripANSIEscapeCodes(text string) string {
+	// Simple regex to remove ANSI escape sequences
+	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	return ansiRegex.ReplaceAllString(text, "")
+}
+
 // View renders the main UI view
 func (m Model) View() string {
 	baseStyle := lipgloss.NewStyle().
@@ -258,8 +287,9 @@ func (m Model) View() string {
 	resultStyle := baseStyle.Copy().
 		Width(int(float64(m.Width)*0.3) - 2)
 
-	inputPane := inputStyle.Render(m.InputViewport.View())
-	resultPane := resultStyle.Render(m.ResultViewport.View())
+	// Force fixed widths to prevent layout shifts
+  	inputPane := inputStyle.Render(m.InputViewport.View())
+    resultPane := resultStyle.Render(m.ResultViewport.View())
 
 	baseView := lipgloss.JoinHorizontal(lipgloss.Top, inputPane, resultPane)
 
@@ -279,8 +309,6 @@ func (m Model) renderHelpPopup() string {
 	// Use the scrollable viewport for help content
 	helpContent := m.HelpViewport.View()
 
-	scrollInfo := " (↑↓ to scroll, Esc to close)"
-
 	helpStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(m.Theme.borderColor).
@@ -291,7 +319,7 @@ func (m Model) renderHelpPopup() string {
 		Height(m.HelpViewport.Height + 4) // Account for padding
 
 	// Add title with scroll info
-	title := "NaSC Help" + scrollInfo
+	title := "NaSC - TUI Calculator (↑↓ to scroll, Esc to close)"
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(m.Theme.focusedColor).

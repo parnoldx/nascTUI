@@ -28,7 +28,7 @@ func PasteCmd() tea.Cmd {
 
 // tick generates periodic tick messages for terminal size checking
 func tick() tea.Cmd {
-	return tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
+	return tea.Tick(time.Second*2, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }
@@ -99,8 +99,9 @@ func (m *Model) handleWindowResize(msg tea.WindowSizeMsg) {
 	m.ResultViewport.Height = viewportHeight
 	
 	// Update input widths with safety check
+	// Reduce width by 3 chars to start scrolling before hitting the edge
 	for i := range m.Inputs {
-		inputFieldWidth := m.InputViewport.Width - 6
+		inputFieldWidth := m.InputViewport.Width - 6 - 3  // -3 for early scrolling
 		if inputFieldWidth < 1 {
 			inputFieldWidth = 1
 		}
