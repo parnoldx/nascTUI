@@ -51,7 +51,7 @@ nasc
 
 ## Contributing
 
-Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+Please feel free to submit a Pull Request. For major changes, open an issue first to discuss it.
 
 ## License
 
