@@ -15,7 +15,7 @@
 
 [![Release](https://img.shields.io/github/release/parnoldx/nascTUI.svg)](https://github.com/parnoldx/nascTUI/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![libqalculate](https://img.shields.io/badge/Powered%20by-libqalculate-green)]([https://claude.ai/code](https://github.com/Qalculate/libqalculate))
+[![libqalculate](https://img.shields.io/badge/Powered%20by-libqalculate-green)](https://github.com/Qalculate/libqalculate)
 
 ## 
 NaSC is an app where you do maths like a normal person. It lets you type whatever you want and smartly figures out what is math and spits out an answer on the right pane. Then you can plug those answers in to future equations and if that answer changes, so does the equations it's used in.
