@@ -106,6 +106,8 @@ extern "C" {
         printops.use_max_decimals = true;
         printops.use_unicode_signs = true;
         printops.use_unit_prefixes = false;
+        struct lconv * lc  = localeconv();      
+        printops.decimalpoint_sign = lc->decimal_point;
         
         // Calculate the expression (preprocessing/postprocessing done in Go)
         string expr_str(expression);
