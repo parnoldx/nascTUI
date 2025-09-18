@@ -106,6 +106,10 @@ extern "C" {
         printops.use_max_decimals = true;
         printops.use_unicode_signs = true;
         printops.use_unit_prefixes = false;
+
+        //set decimal separator
+        std::locale loc;
+        printops.decimalpoint_sign = std::use_facet< std::numpunct<char> >(loc).decimal_point();
         
         // Calculate the expression (preprocessing/postprocessing done in Go)
         string expr_str(expression);
