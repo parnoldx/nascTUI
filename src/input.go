@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/textinput"
 )
@@ -331,4 +332,16 @@ func (m *Model) cancelGoToLine() (tea.Model, tea.Cmd) {
 	m.GoToLineInput.SetValue("")
 	m.GoToLineInput.Blur()
 	return *m, textinput.Blink
+}
+
+// copyFocusedResult copies the result of the focused line to clipboard
+func (m *Model) copyFocusedResult() (tea.Model, tea.Cmd) {
+	if m.Focused >= 0 && m.Focused < len(m.Results) && m.Results[m.Focused] != "" {
+		err := clipboard.WriteAll(m.Results[m.Focused])
+		if err != nil {
+			// Silently ignore clipboard errors
+			return *m, nil
+		}
+	}
+	return *m, nil
 }

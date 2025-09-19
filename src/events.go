@@ -246,6 +246,10 @@ func (m *Model) handleKeyMessage(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return *m, nil
 		}
 		return *m, nil
+		
+	case tea.KeyCtrlS:
+		// Copy result of focused line (Ctrl+S)
+		return m.copyFocusedResult()
 	}
 
 	// Handle Ctrl+P for π symbol

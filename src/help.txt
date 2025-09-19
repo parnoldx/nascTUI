@@ -13,6 +13,7 @@ KEYBOARD SHORTCUTS:
   Ctrl+P        Insert π symbol
   Ctrl+R        Insert √ symbol  
   Ctrl+A        Insert "ans" (Last Answer)
+  Ctrl+S        Copy result of focused line
 
 BASIC USAGE:
 • Type mathematical expressions and see results instantly

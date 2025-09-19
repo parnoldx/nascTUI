@@ -7,11 +7,20 @@
 #include <string.h>
 #include <locale.h>
 #include <mutex>
+#include <algorithm>
 
 using namespace std;
 
 static bool calculator_initialized = false;
 static std::mutex calculator_mutex;
+
+// Helper function to check if string ends with suffix
+static bool hasEnding(const std::string& fullString, const std::string& ending) {
+    if (fullString.length() >= ending.length()) {
+        return fullString.compare(fullString.length() - ending.length(), ending.length(), ending) == 0;
+    }
+    return false;
+}
 
 static void load_currencies() {
     if (calculator) {
@@ -44,13 +53,14 @@ static void initialize_calculator() {
     std::lock_guard<std::mutex> lock(calculator_mutex);
     if (calculator_initialized) return;
     
-    // Set system locale like Nasc
     setlocale(LC_ALL, "");
     
     // Initialize calculator using the global instance (libqalculate provides this)
     if (!calculator) {
         calculator = new Calculator();
     }
+
+    calculator->useDecimalComma();
     
     // Load definitions like Nasc
     calculator->loadGlobalDefinitions();
@@ -61,6 +71,61 @@ static void initialize_calculator() {
     calculator->useIntervalArithmetic(false);
     
     calculator_initialized = true;
+}
+
+  // Enhanced print options with conversion support
+static PrintOptions getPrintOptions(const std::string& input) {
+    PrintOptions printops;
+    printops.multiplication_sign = MULTIPLICATION_SIGN_ASTERISK;
+    printops.number_fraction_format = FRACTION_DECIMAL;
+    printops.max_decimals = 9;
+    printops.use_max_decimals = true;
+    printops.use_unicode_signs = true;
+    printops.use_unit_prefixes = false;
+    struct lconv * lc  = localeconv();
+    printops.decimalpoint_sign = lc->decimal_point;
+
+    // Number base conversions
+    if (hasEnding(input, "to hex")) {
+        printops.base = BASE_HEXADECIMAL;
+    } else if (hasEnding(input, "to bin")) {
+        printops.base = BASE_BINARY;
+    } else if (hasEnding(input, "to dec")) {
+        printops.base = BASE_DECIMAL;
+    } else if (hasEnding(input, "to oct")) {
+        printops.base = BASE_OCTAL;
+    } else if (hasEnding(input, "to duo")) {
+        printops.base = BASE_DUODECIMAL;
+    } else if (hasEnding(input, "to roman")) {
+        printops.base = BASE_ROMAN_NUMERALS;
+    } else if (hasEnding(input, "to bijective")) {
+        printops.base = BASE_BIJECTIVE_26;
+    } else if (hasEnding(input, "to sexa")) {
+        printops.base = BASE_SEXAGESIMAL;
+    } else if (hasEnding(input, "to fp32")) {
+        printops.base = BASE_FP32;
+    } else if (hasEnding(input, "to fp64")) {
+        printops.base = BASE_FP64;
+    } else if (hasEnding(input, "to fp16")) {
+        printops.base = BASE_FP16;
+    } else if (hasEnding(input, "to fp80")) {
+        printops.base = BASE_FP80;
+    } else if (hasEnding(input, "to fp128")) {
+        printops.base = BASE_FP128;
+    } else if (hasEnding(input, "to time")) {
+        printops.base = BASE_TIME;
+    } else if (hasEnding(input, "to unicode")) {
+        printops.base = BASE_UNICODE;
+    }
+    // Time zone conversions
+    else if (hasEnding(input, "to utc") || hasEnding(input, "to gmt")) {
+        printops.time_zone = TIME_ZONE_UTC;
+    } else if (hasEnding(input, "to cet")) {
+        printops.time_zone = TIME_ZONE_CUSTOM;
+        printops.custom_time_zone = 60;
+    }
+
+    return printops;
 }
 
 extern "C" {
@@ -98,19 +163,16 @@ extern "C" {
         evalops.structuring = STRUCTURING_SIMPLIFY;
         evalops.keep_zero_units = false;
         
-        // Configure print options exactly like Nasc
-        PrintOptions printops;
-        printops.multiplication_sign = MULTIPLICATION_SIGN_ASTERISK;
-        printops.number_fraction_format = FRACTION_DECIMAL;
-        printops.max_decimals = 9;
-        printops.use_max_decimals = true;
-        printops.use_unicode_signs = true;
-        printops.use_unit_prefixes = false;
-        
         // Calculate the expression (preprocessing/postprocessing done in Go)
         string expr_str(expression);
-        string result = calculator->calculateAndPrint(expr_str, 2000, evalops, printops);
-        
+
+        string unlocalized_expr = calculator->unlocalizeExpression(expr_str, evalops.parse_options);
+
+        // Get enhanced print options with conversion support
+        PrintOptions printops = getPrintOptions(unlocalized_expr);
+
+        string result = calculator->calculateAndPrint(unlocalized_expr, 2000, evalops, printops);
+
         char* c_result = (char*)malloc(result.length() + 1);
         strcpy(c_result, result.c_str());
         return c_result;

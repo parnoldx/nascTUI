@@ -359,9 +359,11 @@ func CalculateExpression(expr string, results []string, currentIndex int) string
 	
 	// First replace numbered ans (ans1, ans2, etc.) - only from previous lines
 	for i := 0; i < currentIndex && i < len(results); i++ {
+		ansPattern := fmt.Sprintf("ans%d", i+1)
 		if results[i] != "" {
-			ansPattern := fmt.Sprintf("ans%d", i+1)
 			processedExpr = strings.ReplaceAll(processedExpr, ansPattern, results[i])
+		} else {
+			processedExpr = strings.ReplaceAll(processedExpr, ansPattern, "0")
 		}
 	}
 	

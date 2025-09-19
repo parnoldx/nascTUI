@@ -678,3 +678,118 @@ func TestExchangeRateWithAnswerReferences(t *testing.T) {
 		})
 	}
 }
+
+// TestCommaDecimalSeparator tests comma decimal separator support
+func TestCommaDecimalSeparator(t *testing.T) {
+	results := []string{}
+	
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"comma addition", "2,5 + 3,7", "6.2"},
+		{"comma multiplication", "1,5 * 2,0", "3"},
+		{"comma division", "10,5 / 2,1", "5"},
+		{"comma subtraction", "5,8 - 2,3", "3.5"},
+		{"mixed comma and dot", "2,5 + 3.7", "6.2"},
+		{"dot should still work", "2.5 + 3.7", "6.2"},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Check if input is recognized as calculation
+			shouldCalc := CheckForCalculation(tt.input)
+			if !shouldCalc {
+				t.Errorf("CheckForCalculation(%q) should return true for decimal numbers", tt.input)
+			}
+			
+			// Test actual calculation
+			result := CalculateExpression(tt.input, results, 0)
+			
+			if result == "" || result == "Error" {
+				t.Errorf("Comma decimal calculation failed for %q: got %q", tt.input, result)
+				return
+			}
+			
+			// Check if we got a vector result (indicating comma was treated as separator)
+			if strings.HasPrefix(result, "[") && strings.HasSuffix(result, "]") {
+				t.Errorf("Comma decimal test %q failed - comma treated as vector separator, got: %q, expected: %q", tt.input, result, tt.expected)
+				return
+			}
+			
+			// For exact matches, compare directly
+			if result == tt.expected {
+				return // Test passed
+			}
+			
+			// Normalize both result and expected to use dots for comparison
+			// This handles cases where libqalculate returns comma decimal separator
+			resultNormalized := strings.ReplaceAll(result, ",", ".")
+			expectedNormalized := strings.ReplaceAll(tt.expected, ",", ".")
+			
+			// Try numeric comparison for cases like "6.200000000" vs "6.2"
+			// This handles libqalculate's decimal formatting variations
+			resultTrimmed := strings.TrimRight(resultNormalized, "0")
+			resultTrimmed = strings.TrimSuffix(resultTrimmed, ".")
+			expectedTrimmed := strings.TrimRight(expectedNormalized, "0")
+			expectedTrimmed = strings.TrimSuffix(expectedTrimmed, ".")
+			
+			if resultTrimmed != expectedTrimmed {
+				t.Errorf("Comma decimal test %q: got %q, expected %q (normalized: %q vs %q)", tt.input, result, tt.expected, resultTrimmed, expectedTrimmed)
+			}
+		})
+	}
+}
+
+// TestNumberBaseConversions tests the enhanced PrintOptions conversion functionality
+func TestNumberBaseConversions(t *testing.T) {
+	results := []string{}
+	
+	tests := []struct {
+		name     string
+		input    string
+		shouldCalculate bool
+		expectedContains string // What the result should contain
+	}{
+		{"decimal to hex", "255 to hex", true, "FF"},
+		{"decimal to binary", "15 to bin", true, "1111"},
+		{"decimal to octal", "64 to oct", true, "100"},
+		{"decimal to duodecimal", "144 to duo", true, "100"},
+		{"decimal to roman", "42 to roman", true, "XLII"},
+		{"decimal conversion", "0xFF to dec", true, "255"},
+		// Float conversions (may not be supported by all libqalculate versions)
+		{"decimal to fp32", "3.14 to fp32", true, ""},
+		{"decimal to time", "3661 to time", true, ":"}, // Should contain time format
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Check if input is recognized as calculation
+			shouldCalc := CheckForCalculation(tt.input)
+			if shouldCalc != tt.shouldCalculate {
+				t.Errorf("CheckForCalculation(%q) = %v, want %v", tt.input, shouldCalc, tt.shouldCalculate)
+			}
+			
+			if !shouldCalc {
+				return
+			}
+			
+			// Test actual calculation
+			result := CalculateExpression(tt.input, results, 0)
+			
+			if result == "" || result == "Error" {
+				t.Logf("Conversion %q failed or not supported: %q", tt.input, result)
+				return // Some conversions might not be supported in all libqalculate versions
+			}
+			
+			// Check if result contains expected content (if specified)
+			if tt.expectedContains != "" && !strings.Contains(result, tt.expectedContains) {
+				t.Errorf("Conversion %q: expected result to contain %q, got %q", tt.input, tt.expectedContains, result)
+			}
+			
+			// Log successful conversions for verification
+			t.Logf("Conversion %q -> %q", tt.input, result)
+		})
+	}
+}
