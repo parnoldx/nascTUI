@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/exp/teatest"
 )
@@ -791,5 +793,47 @@ func TestNumberBaseConversions(t *testing.T) {
 			// Log successful conversions for verification
 			t.Logf("Conversion %q -> %q", tt.input, result)
 		})
+	}
+}
+
+// Helper function to create a test model
+func createTestModel() Model {
+	ti := textinput.New()
+	ti.Width = 40
+	ti.Focus()
+	
+	return Model{
+		Inputs:         []textinput.Model{ti},
+		Results:        []string{""},
+		Calculating:    []bool{false},
+		Focused:        0,
+		Width:          80,
+		Height:         24,
+		InputViewport:  viewport.New(50, 20),
+		ResultViewport: viewport.New(30, 20),
+		Theme:          newTheme(),
+		UndoSystem:     NewUndoSystem(),
+	}
+}
+
+// Test basic undo functionality
+func TestBasicUndo(t *testing.T) {
+	model := createTestModel()
+	model.Inputs[0].SetValue("initial")
+	
+	// Save initial state
+	model.saveState()
+	
+	// Make a change
+	model.Inputs[0].SetValue("modified")
+	
+	// Undo should restore initial state
+	success := model.undo()
+	if !success {
+		t.Error("Undo should have succeeded")
+	}
+	
+	if model.Inputs[0].Value() != "initial" {
+		t.Errorf("Expected 'initial' after undo, got '%s'", model.Inputs[0].Value())
 	}
 }
