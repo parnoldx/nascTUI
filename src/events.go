@@ -367,29 +367,40 @@ func (m *Model) handleHelpKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc:
 		m.ShowHelp = false
-		return *m, nil
+		return *m, func() tea.Msg { return nil }
 
 	case tea.KeyUp:
 		m.HelpViewport.LineUp(1)
-		return *m, nil
+		return *m, func() tea.Msg { return nil }
 
 	case tea.KeyDown:
 		m.HelpViewport.LineDown(1)
-		return *m, nil
+		return *m, func() tea.Msg { return nil }
 
 	case tea.KeyPgUp:
 		m.HelpViewport.HalfViewUp()
-		return *m, nil
+		return *m, func() tea.Msg { return nil }
 
 	case tea.KeyPgDown:
 		m.HelpViewport.HalfViewDown()
-		return *m, nil
+		return *m, func() tea.Msg { return nil }
 	}
 
-	// Update the help viewport with the message
-	var cmd tea.Cmd
-	m.HelpViewport, cmd = m.HelpViewport.Update(msg)
-	return *m, cmd
+	// Handle vim-style navigation and quit keys
+	switch msg.String() {
+	case "j":
+		m.HelpViewport.LineDown(1)
+		return *m, func() tea.Msg { return nil }
+	case "k":
+		m.HelpViewport.LineUp(1)
+		return *m, func() tea.Msg { return nil }
+	case "q":
+		m.ShowHelp = false
+		return *m, func() tea.Msg { return nil }
+	}
+
+	// Don't pass any other keys to prevent them from affecting the main application
+	return *m, func() tea.Msg { return nil }
 }
 
 // handleGoToLineKeys handles keyboard input when go-to-line dialog is showing
