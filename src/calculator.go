@@ -348,7 +348,16 @@ func CalculateExpression(expr string, results []string, currentIndex int) string
 	if expr == "" {
 		return ""
 	}
-	
+
+	// Easter egg: detect "0/0" or "infinity"
+	trimmedExpr := strings.TrimSpace(strings.ToLower(expr))
+	if trimmedExpr == "0/0" {
+		return "¯\\_(ツ)_/¯"
+	}
+	if trimmedExpr == "infinity" || trimmedExpr == "inf" {
+		return "∞ The void stares back ∞"
+	}
+
 	// Check if this input should be calculated
 	if !CheckForCalculation(expr) {
 		return ""
@@ -370,11 +379,17 @@ func CalculateExpression(expr string, results []string, currentIndex int) string
 	// Then replace standalone 'ans' with last non-empty result from previous lines
 	ansRegex := regexp.MustCompile(`\bans\b`)
 	if ansRegex.MatchString(processedExpr) {
+		replaced := false
 		for i := currentIndex - 1; i >= 0; i-- {
 			if results[i] != "" {
 				processedExpr = ansRegex.ReplaceAllString(processedExpr, results[i])
+				replaced = true
 				break
 			}
+		}
+		// If ans couldn't be replaced (first line or no previous results), replace with 0
+		if !replaced {
+			processedExpr = ansRegex.ReplaceAllString(processedExpr, "0")
 		}
 	}
 	
