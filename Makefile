@@ -29,8 +29,8 @@ test: src/calc_wrapper.o
 	cd src && go test -v
 
 # Create demo GIF (requires VHS dependencies)
-demo: 
-	vhs demo.tape
+demo:
+	vhs src/demo.tape
 
 # Live reload during development (requires watchexec)
 live:
