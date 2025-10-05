@@ -11,30 +11,51 @@ KEYBOARD SHORTCUTS:
   Ctrl+Space    Show completion popup
   Ctrl+L        GoTo line
   Ctrl+P        Insert π symbol
-  Ctrl+R        Insert √ symbol  
+  Ctrl+R        Insert √ symbol
   Ctrl+A        Insert "ans" (Last Answer)
   Ctrl+S        Copy result of focused line
+  Ctrl+Z        Undo
+  Ctrl+Y        Redo
+
+MOUSE INTERACTIONS:
+  Click input   Focus and position cursor in line
+  Click result  Insert answer reference (ans1, ans2, etc.)
 
 BASIC USAGE:
 • Type mathematical expressions and see results instantly
 • Use Enter to create new lines
 • Reference previous results with 'ans' or 'ans1', 'ans2', etc.
 • Click on results to insert answer references
-
-EXAMPLES:
-  2 + 2                    → 4
-  ans * 5                  → 20
-  sin(45°)                 → 0.707...
-  100 USD to EUR           → Currency conversion
-  5 feet to meters         → Unit conversion
-  solve(2x = 10)           → Equation solving
+• Add comments using // or # (e.g., "2 + 2 // my calculation")
 
 FEATURES:
-• Arithmetic: +, -, *, /, ^, %, sqrt(), etc.
-• Trigonometry: sin(), cos(), tan(), asin(), etc.
-• Units: Convert between length, weight, temperature, etc.
-• Currencies: Real-time exchange rates
-• Constants: pi, e, c (speed of light), etc.
-• Functions: log(), ln(), abs(), round(), etc.
-• Answer references: ans, ans1, ans2, etc.
+
+Arithmetic & Algebra:
+  +, -, *, /, ^, %, sqrt(), pow(), factorial(), solve()
+  (5 + 3) * 2^3 → 64
+  solve(2x = 10) → x = 5
+
+Trigonometry:
+  sin(), cos(), tan(), asin(), acos(), atan(), sinh(), cosh(), tanh()
+  sin(45°) → 0.707...
+
+Logarithms & Exponents:
+  log(), ln(), exp(), log10(), log2()
+  log(100) → 2
+
+Unit Conversions:
+  Length, weight, temperature, volume, speed, etc.
+  5 feet to meters → 1.524 m
+
+Currency Conversions:
+  Real-time exchange rates, symbols: €, $, £, ¥
+  100 USD to EUR → 85.50€
+
+Mathematical Constants:
+  pi, e, c (speed of light), h (Planck), etc.
+  pi * 2 → 6.283...
+
+Answer References:
+  ans (last result), ans1, ans2, ans3, etc.
+  ans * 1.2 → Previous result × 1.2
 

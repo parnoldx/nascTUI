@@ -319,7 +319,7 @@ func (m Model) renderHelpPopup() string {
 		Height(m.HelpViewport.Height + 4) // Account for padding
 
 	// Add title with scroll info
-	title := "NaSC - TUI Calculator (↑↓ to scroll, Esc to close)"
+	title := "NaSC (↑↓ to scroll, Esc to close)"
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(m.Theme.focusedColor).

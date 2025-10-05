@@ -365,6 +365,9 @@ func (m *Model) handleCompletionKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // handleHelpKeys handles keyboard input when help is showing
 func (m *Model) handleHelpKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
+	case tea.KeyCtrlC:
+		return *m, tea.Quit
+
 	case tea.KeyEsc:
 		m.ShowHelp = false
 		return *m, func() tea.Msg { return nil }

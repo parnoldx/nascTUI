@@ -243,18 +243,21 @@ func CheckForCalculation(input string) bool {
 
 func prepareString(input string) string {
 	result := input
-	
-	// Remove comments after "//"
+
+	// Remove comments after "//" or "#"
 	if commentPos := strings.Index(result, "//"); commentPos != -1 {
 		result = result[:commentPos]
 	}
-	
+	if commentPos := strings.Index(result, "#"); commentPos != -1 {
+		result = result[:commentPos]
+	}
+
 	// Replace currency symbols with currency codes
 	result = strings.ReplaceAll(result, "€", "EUR")
-	result = strings.ReplaceAll(result, "$", "USD") 
+	result = strings.ReplaceAll(result, "$", "USD")
 	result = strings.ReplaceAll(result, "£", "GBP")
 	result = strings.ReplaceAll(result, "¥", "JPY")
-	
+
 	return result
 }
 
