@@ -1,21 +1,14 @@
 #!/bin/bash
 
-# NaSC Installation Script
-# Downloads pre-built binaries from GitHub releases
-
 set -e
 
-# Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
-CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# ASCII Art
-echo -e "${CYAN}"
+echo -e "${BLUE}"
 cat << "EOF"
   _   _        _____  _____ 
  | \ | |      / ____|/ ____|
@@ -23,182 +16,202 @@ cat << "EOF"
  | . ` |/ _` |\___ \| |     
  | |\  | (_| |____) | |____ 
  |_| \_|\__,_|_____/ \_____|
-                           
+                            
 Do maths like a normal person
 EOF
 echo -e "${NC}"
 
-# Configuration
 GITHUB_REPO="parnoldx/nascTUI"
-VERSION=${NASC_VERSION:-"latest"}
 
-# Get system information
-OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-ARCH=$(uname -m)
+command_exists() { command -v "$1" >/dev/null 2>&1; }
 
-# Normalize architecture names
-case $ARCH in
-    x86_64|amd64)
-        ARCH="amd64"
-        ;;
-    *)
-        echo -e "${RED}Unsupported architecture: $ARCH${NC}"
-        exit 1
-        ;;
-esac
-
-# Only support Linux for now
-if [ "$OS" != "linux" ]; then
-    echo -e "${RED}This installer only supports Linux. Your OS: $OS${NC}"
-    exit 1
-fi
-
-echo -e "${BLUE}Detected OS: $OS${NC}"
-echo -e "${BLUE}Detected Architecture: $ARCH${NC}"
-
-# Function to check if command exists
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
+detect_distro() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        echo "$ID"
+    elif command_exists pacman; then
+        echo "arch"
+    elif command_exists apt; then
+        echo "ubuntu"
+    elif command_exists dnf; then
+        echo "fedora"
+    elif command_exists zypper; then
+        echo "opensuse"
+    else
+        echo "unknown"
+    fi
 }
 
-# Check for wget or curl
-if command_exists curl; then
-    DOWNLOAD_CMD="curl -L"
-    echo -e "${GREEN}✓ curl found${NC}"
-elif command_exists wget; then
-    DOWNLOAD_CMD="wget -O-"
-    echo -e "${YELLOW}⚠ Using wget (curl recommended)${NC}"
-else
-    echo -e "${RED}✗ Neither curl nor wget found. Please install curl or wget.${NC}"
-    exit 1
-fi
-
-if command_exists pkg-config && pkg-config --exists libqalculate >/dev/null 2>&1; then
-    LIBQALC_VERSION=$(pkg-config --modversion libqalculate)
-    echo -e "${GREEN}✓ libqalculate $LIBQALC_VERSION found${NC}"
-else
-    echo -e "${YELLOW}⚠ libqalculate not found${NC}"
-    echo -e "${YELLOW}NaSC requires libqalculate to work properly.${NC}"
-    echo
-    echo -e "${CYAN}To install libqalculate on various distributions:${NC}"
-    echo -e "${CYAN}Ubuntu/Debian: sudo apt install libqalculate22-dev${NC}"
-    echo -e "${CYAN}Arch Linux:    sudo pacman -S libqalculate${NC}"
-    echo -e "${CYAN}Fedora:        sudo dnf install libqalculate-devel${NC}"
-    echo -e "${CYAN}openSUSE:      sudo zypper install libqalculate-devel${NC}"
-    echo
-fi
-echo
-# Determine installation directory
-if [ -w "/usr/local/bin" ] && [ "$EUID" -ne 0 ]; then
-    INSTALL_DIR="/usr/local/bin"
-    NEEDS_SUDO="false"
-elif [ "$EUID" -eq 0 ]; then
-    INSTALL_DIR="/usr/local/bin"
-    NEEDS_SUDO="false"
-else
-    INSTALL_DIR="$HOME/.local/bin"
-    NEEDS_SUDO="false"
-    mkdir -p "$INSTALL_DIR"
+install_deps() {
+    local distro=$(detect_distro)
+    echo -e "${BLUE}Detected distribution: $distro${NC}"
     
-    # Check if ~/.local/bin is in PATH
-    if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
-        echo -e "${YELLOW}⚠ $INSTALL_DIR is not in your PATH${NC}"
-        echo -e "${YELLOW}Adding it to your shell configuration...${NC}"
+    case $distro in
+        arch)
+            sudo pacman -S --needed go libqalculate pkgconf gcc git
+            ;;
+        ubuntu|debian)
+            sudo apt update
+            sudo apt install -y golang libqalculate-dev pkg-config gcc git
+            ;;
+        fedora)
+            sudo dnf install -y golang libqalculate-devel pkgconfig gcc git
+            ;;
+        opensuse)
+            sudo zypper install -y go libqalculate-devel pkg-config gcc git
+            ;;
+        *)
+            echo -e "${RED}Unsupported distribution. Please install manually: go, libqalculate, gcc, git${NC}"
+            exit 1
+            ;;
+    esac
+}
+
+check_deps() {
+    local missing=()
+    
+    command_exists curl || missing+=("curl")
+    command_exists go || missing+=("go")
+    command_exists gcc || missing+=("gcc")
+    command_exists git || missing+=("git")
+    pkg-config --exists libqalculate || missing+=("libqalculate-dev")
+    
+    if [ ${#missing[@]} -gt 0 ]; then
+        echo -e "${YELLOW}Missing dependencies: ${missing[*]}${NC}"
+        echo -e "${BLUE}Installing dependencies...${NC}"
+        install_deps
+    else
+        echo -e "${GREEN}✓ All dependencies found${NC}"
+    fi
+}
+
+get_current_version() {
+    if command_exists nasc; then
+        nasc --version 2>/dev/null || echo "unknown"
+    else
+        echo "not_installed"
+    fi
+}
+
+get_latest_version() {
+    # Use GitHub API for reliable version detection
+    curl -s "https://api.github.com/repos/$GITHUB_REPO/releases/latest" | \
+    grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | head -n1
+}
+
+version_compare() {
+    local current=$1 latest=$2
+    
+    if [ "$current" = "not_installed" ]; then
+        echo "install"
+    elif [ "$current" = "$latest" ]; then
+        echo "current"
+    else
+        echo "update"
+    fi
+}
+
+install_binary() {
+    local version=$1
+    local os="linux"
+    local arch=$(uname -m)
+    
+    case $arch in
+        x86_64) arch="amd64" ;;
+        *) echo -e "${RED}Unsupported architecture: $arch${NC}"; exit 1 ;;
+    esac
+    
+    local binary_name="nasc-$os-$arch"
+    local download_url="https://github.com/$GITHUB_REPO/releases/download/$version/$binary_name"
+    local temp_dir=$(mktemp -d)
+    
+    echo -e "${BLUE}Downloading $binary_name...${NC}"
+    curl -L "$download_url" -o "$temp_dir/nasc" || {
+        echo -e "${YELLOW}Binary download failed, building from source...${NC}"
+        build_from_source "$version"
+        return
+    }
+    
+    chmod +x "$temp_dir/nasc"
+    
+    if [ -w "/usr/local/bin" ] && [ "$EUID" -ne 0 ]; then
+        sudo cp "$temp_dir/nasc" /usr/local/bin/nasc
+    elif [ "$EUID" -eq 0 ]; then
+        cp "$temp_dir/nasc" /usr/local/bin/nasc
+    else
+        mkdir -p "$HOME/.local/bin"
+        cp "$temp_dir/nasc" "$HOME/.local/bin/nasc"
         
-        # Add to appropriate shell config
-        if [ -n "$ZSH_VERSION" ] || [ "$SHELL" = "/bin/zsh" ] || [ "$SHELL" = "/usr/bin/zsh" ]; then
-            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.zshrc"
-            echo -e "${GREEN}Added to ~/.zshrc${NC}"
-        elif [ -n "$BASH_VERSION" ] || [ "$SHELL" = "/bin/bash" ] || [ "$SHELL" = "/usr/bin/bash" ]; then
+        if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
             echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
-            echo -e "${GREEN}Added to ~/.bashrc${NC}"
-        else
-            echo -e "${YELLOW}Please add $INSTALL_DIR to your PATH manually${NC}"
+            echo -e "${YELLOW}Added $HOME/.local/bin to PATH in ~/.bashrc${NC}"
         fi
     fi
-fi
-
-echo -e "${BLUE}Installing to: $INSTALL_DIR${NC}"
-echo
-
-# Create temporary directory
-TEMP_DIR=$(mktemp -d)
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Failed to create temporary directory${NC}"
-    exit 1
-fi
-
-# Cleanup function
-cleanup() {
-    rm -rf "$TEMP_DIR"
+    
+    rm -rf "$temp_dir"
+    echo -e "${GREEN}✓ Installed nasc $version${NC}"
 }
-trap cleanup EXIT
 
-# Get latest release info or use specified version
-if [ "$VERSION" = "latest" ]; then
-    if command_exists curl; then
-        LATEST_RELEASE=$(curl -s "https://api.github.com/repos/$GITHUB_REPO/releases/latest")
+build_from_source() {
+    local version=$1
+    local temp_dir=$(mktemp -d)
+    
+    echo -e "${BLUE}Building from source...${NC}"
+    git clone --depth 1 --branch "$version" "https://github.com/$GITHUB_REPO.git" "$temp_dir"
+    cd "$temp_dir"
+    
+    g++ -c -std=c++11 $(pkg-config --cflags libqalculate) src/calc_wrapper.cpp -o src/calc_wrapper.o
+    cd src && go build -ldflags "-X main.version=$version" -o ../nasc
+    
+    if [ -w "/usr/local/bin" ] && [ "$EUID" -ne 0 ]; then
+        sudo cp ../nasc /usr/local/bin/nasc
+    elif [ "$EUID" -eq 0 ]; then
+        cp ../nasc /usr/local/bin/nasc
     else
-        LATEST_RELEASE=$(wget -qO- "https://api.github.com/repos/$GITHUB_REPO/releases/latest")
+        mkdir -p "$HOME/.local/bin"
+        cp ../nasc "$HOME/.local/bin/nasc"
     fi
     
-    VERSION=$(echo "$LATEST_RELEASE" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | head -n1)
-    if [ -z "$VERSION" ]; then
-        echo -e "${RED}Failed to get latest release version${NC}"
+    cd / && rm -rf "$temp_dir"
+    echo -e "${GREEN}✓ Built and installed nasc $version${NC}"
+}
+
+main() {
+    check_deps
+    
+    local current_version=$(get_current_version)
+    local latest_version=$(get_latest_version)
+    
+    if [ -z "$latest_version" ]; then
+        echo -e "${RED}Failed to fetch latest version${NC}"
         exit 1
     fi
-fi
-
-echo -e "${BLUE}Installing NaSC version: $VERSION${NC}"
-
-# Construct download URL
-BINARY_NAME="nasc-$OS-$ARCH"
-DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$VERSION/$BINARY_NAME"
-
-# Download binary
-cd "$TEMP_DIR"
-if command_exists curl; then
-    curl -L "$DOWNLOAD_URL" -o nasc
-else
-    wget "$DOWNLOAD_URL" -O nasc
-fi
-
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Failed to download binary${NC}"
-    echo -e "${YELLOW}Please check if the release exists for your platform${NC}"
-    echo -e "${YELLOW}Available at: https://github.com/$GITHUB_REPO/releases${NC}"
-    exit 1
-fi
-
-# Make executable
-chmod +x nasc
-
-if [ "$INSTALL_DIR" = "/usr/local/bin" ] && [ "$EUID" -ne 0 ]; then
-    if sudo cp nasc "$INSTALL_DIR/nasc"; then
-        echo -e "${GREEN}✓ Installed to $INSTALL_DIR${NC}"
+    
+    echo -e "${BLUE}Current version: $current_version${NC}"
+    echo -e "${BLUE}Latest version: $latest_version${NC}"
+    
+    local action=$(version_compare "$current_version" "$latest_version")
+    
+    case $action in
+        install)
+            echo -e "${BLUE}Installing nasc...${NC}"
+            install_binary "$latest_version"
+            ;;
+        update)
+            echo -e "${BLUE}Updating nasc...${NC}"
+            install_binary "$latest_version"
+            ;;
+        current)
+            echo -e "${GREEN}✓ nasc is up to date${NC}"
+            exit 0
+            ;;
+    esac
+    
+    if command_exists nasc; then
+        echo -e "${GREEN}🎉 nasc installation complete! Run 'nasc' to start.${NC}"
     else
-        echo -e "${YELLOW}Sudo failed, installing to user directory...${NC}"
-        INSTALL_DIR="$HOME/.local/bin"
-        mkdir -p "$INSTALL_DIR"
-        cp nasc "$INSTALL_DIR/nasc"
-        echo -e "${GREEN}✓ Installed to $INSTALL_DIR${NC}"
+        echo -e "${YELLOW}⚠ nasc not found in PATH. You may need to restart your shell.${NC}"
     fi
-else
-    cp nasc "$INSTALL_DIR/nasc"
-    echo -e "${GREEN}✓ Installed to $INSTALL_DIR${NC}"
-fi
+}
 
-# Test if command is available
-if command_exists nasc; then
-    echo
-    echo -e "${GREEN}🎉 NaSC installation complete!${NC}"
-    echo
-    echo -e "${CYAN}Usage:${NC}"
-    echo -e "${CYAN}  nasc${NC}"
-else
-    echo -e "${YELLOW}⚠ nasc command not found in PATH${NC}"
-    echo -e "${YELLOW}You may need to restart your shell or run:${NC}"
-    echo -e "${YELLOW}  source ~/.bashrc  # or ~/.zshrc${NC}"
-fi
-
-
+main "$@"

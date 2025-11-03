@@ -26,7 +26,8 @@ build() {
     cd "$srcdir/nascTUI"
     g++ -c -std=c++11 $(pkg-config --cflags libqalculate) src/calc_wrapper.cpp -o src/calc_wrapper.o
     cd src
-    go build -trimpath -buildmode=pie -mod=readonly -modcacherw -o ../nasc
+    local version=$(git describe --tags --abbrev=0 2>/dev/null || echo "dev")
+    go build -trimpath -buildmode=pie -mod=readonly -modcacherw -ldflags "-X main.version=$version" -o ../nasc
 }
 
 package() {

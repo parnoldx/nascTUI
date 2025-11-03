@@ -6,7 +6,7 @@ src/calc_wrapper.o: src/calc_wrapper.cpp
 
 # Build the main binary
 build: src/calc_wrapper.o
-	cd src && go build -o ../nasc
+	cd src && go build -ldflags "-X main.version=$(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)" -o ../nasc
 
 # Clean build artifacts
 clean:

@@ -2,44 +2,45 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
+	"github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
 )
 
 const defaultPlaceholder = "Press Ctrl+H for help"
 
 type Model struct {
-	Inputs         []textinput.Model
-	Results        []string
-	Focused        int
-	Width          int
-	Height         int
-	InputViewport  viewport.Model
-	ResultViewport viewport.Model
-	Theme          Theme
-	Calculating    []bool
-	ShowCompletions bool
-	Completions     []string
-	SelectedCompletion int
+	Inputs              []textinput.Model
+	Results             []string
+	Focused             int
+	Width               int
+	Height              int
+	InputViewport       viewport.Model
+	ResultViewport      viewport.Model
+	Theme               Theme
+	Calculating         []bool
+	ShowCompletions     bool
+	Completions         []string
+	SelectedCompletion  int
 	LastCompletionQuery string
-	ShowHelp       bool
-	HelpViewport   viewport.Model
-	UndoSystem     *UndoSystem
-	ShowGoToLine   bool
-	GoToLineInput  textinput.Model
-	LastResultContent string
+	ShowHelp            bool
+	HelpViewport        viewport.Model
+	UndoSystem          *UndoSystem
+	ShowGoToLine        bool
+	GoToLineInput       textinput.Model
+	LastResultContent   string
 }
 
 func (m Model) GetTextInputWidth() int {
-	width := int(float64(m.Width)*0.7) - 6 - 3  // -3 for early scrolling
+	width := int(float64(m.Width)*0.7) - 6 - 3 // -3 for early scrolling
 	if width < 1 {
 		return 1
 	}
@@ -47,7 +48,7 @@ func (m Model) GetTextInputWidth() int {
 }
 
 func GetTextInputWidth(width int) int {
-	calcWidth := int(float64(width)*0.7) - 6 - 3  // -3 for early scrolling
+	calcWidth := int(float64(width)*0.7) - 6 - 3 // -3 for early scrolling
 	if calcWidth < 1 {
 		return 1
 	}
@@ -56,14 +57,14 @@ func GetTextInputWidth(width int) int {
 
 func InitialModel() Model {
 	terminalWidth, terminalHeight, _ := term.GetSize(int(os.Stdout.Fd()))
-	
+
 	ti := textinput.New()
 	ti.Placeholder = defaultPlaceholder
 	ti.Focus()
 	ti.Width = GetTextInputWidth(terminalWidth)
 	ti.Prompt = ""
 	ti.CharLimit = 0
-	
+
 	inputVp := viewport.New(int(float64(terminalWidth)*0.7)-2, terminalHeight-2)
 	resultVp := viewport.New(int(float64(terminalWidth)*0.3)-2, terminalHeight-2)
 	helpVp := viewport.New(0, 0)
@@ -122,36 +123,36 @@ func (m *Model) addMultipleInputs(content string) {
 	if content == "" {
 		return
 	}
-	
+
 	// Save state before making changes (only if we actually have content to add)
 	m.saveState()
-	
+
 	lines := strings.Split(strings.TrimSpace(content), "\n")
-	
+
 	for _, line := range lines {
 		// Trim whitespace but keep the line content
 		line = strings.TrimSpace(line)
-		
+
 		// Skip empty lines
 		if line == "" {
 			continue
 		}
-		
+
 		newInput := textinput.New()
 		newInput.Placeholder = ""
 		newInput.Width = m.GetTextInputWidth()
 		newInput.Prompt = ""
 		newInput.SetValue(line)
 		newInput.SetCursor(len(line))
-		
+
 		m.Inputs = append(m.Inputs, newInput)
 		m.Results = append(m.Results, "")
 		m.Calculating = append(m.Calculating, false)
-		
+
 		index := len(m.Results) - 1
 		m.Results[index] = CalculateExpression(line, m.Results, index)
 	}
-	
+
 	// If no inputs were added and we have no existing inputs, create default
 	if len(m.Inputs) == 0 {
 		ti := textinput.New()
@@ -160,7 +161,7 @@ func (m *Model) addMultipleInputs(content string) {
 		ti.Width = m.GetTextInputWidth()
 		ti.Prompt = ""
 		ti.CharLimit = 0
-		
+
 		m.Inputs = []textinput.Model{ti}
 		m.Results = []string{""}
 		m.Calculating = []bool{false}
@@ -179,21 +180,31 @@ func (m *Model) addMultipleInputs(content string) {
 	}
 }
 
+var version = "dev" // Will be set at build time
+
 func main() {
+	showVersion := flag.Bool("version", false, "Show version information")
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
+
 	go func() {
 		if UpdateExchangeRates() {
 			log.Println("Exchange rates updated successfully")
 		}
 	}()
-	
+
 	// Check for piped input
 	initialInput := readStdin()
-	
+
 	model := InitialModel()
 	if initialInput != "" {
 		model.addMultipleInputs(initialInput)
 	}
-		
+
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if err := p.Start(); err != nil {
 		fmt.Printf("Error: %v\n", err)
