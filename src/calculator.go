@@ -5,6 +5,7 @@ package main
 #cgo CXXFLAGS: -std=c++11
 #cgo LDFLAGS: -lstdc++
 #include <stdlib.h>
+#include <stdbool.h>
 
 char* calculate_expression(const char* expression);
 void free_result(char* result);
