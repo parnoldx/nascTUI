@@ -32,9 +32,28 @@ NaSC is an app where you do maths like a normal person. It lets you type whateve
 
 ## Installation
 
-#### Linux
+Works on Arch Linux, Omarchy, and other Arch derivatives, plus Debian/Ubuntu, Fedora, and openSUSE.
+
 ```bash
 bash -c "$(curl -sLo- https://raw.githubusercontent.com/parnoldx/nascTUI/refs/heads/master/install.sh)"
+```
+
+Or from a checkout:
+
+```bash
+git clone https://github.com/parnoldx/nascTUI.git
+cd nascTUI
+./install.sh
+```
+
+Arch / Omarchy / AUR:
+
+```bash
+# official extra packages used at runtime / build time
+omarchy pkg add libqalculate go   # or: sudo pacman -S --needed libqalculate go
+
+# AUR package
+yay -S nasc-tui
 ```
 
 ## Usage
