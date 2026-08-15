@@ -8,7 +8,7 @@
  |_| \_|\__,_|_____/ \_____|
 
 ```               
-<h3>🧮 Do maths like a normal person 🧮</h3>
+<h3>Do maths like a normal person</h3>
 
 
 ![NASC TUI Demo](demo.gif)
