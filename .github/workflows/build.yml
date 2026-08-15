@@ -29,7 +29,7 @@ jobs:
 
     - name: Build
       working-directory: ./src
-      run: go build -v ./...
+      run: go build -ldflags "-X main.version=test" -v -o ../nasc
 
     - name: Test
       working-directory: ./src

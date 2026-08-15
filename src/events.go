@@ -2,298 +2,220 @@ package main
 
 import (
 	"fmt"
-	"slices"
-	"strings"
 
 	"github.com/charmbracelet/bubbletea"
 )
 
-// handlePasteMessage handles clipboard paste content
 func (m *Model) handlePasteMessage(content string) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
-
-	if strings.Contains(content, "\n") {
-		// Multi-line content - add to existing inputs
-		m.addMultipleInputs(content)
+	if content == "" {
+		return *m, nil
+	}
+	if containsNewline(content) {
+		cmd := m.addMultipleInputs(content)
 		m.updateViewports()
 		m.scrollToFocused()
-	} else if content != "" {
-		// Single-line content - insert into current input
-		currentValue := m.Inputs[m.Focused].Value()
-		cursorPos := m.Inputs[m.Focused].Position()
-		newValue := currentValue[:cursorPos] + content + currentValue[cursorPos:]
-		m.Inputs[m.Focused].SetValue(newValue)
-		m.Inputs[m.Focused].SetCursor(cursorPos + len(content))
-
-		// Trigger calculation if non-empty
-		if !m.Calculating[m.Focused] && newValue != "" {
-			m.Calculating[m.Focused] = true
-			cmds = append(cmds, CalculateCmd(newValue, m.Results, m.Focused))
-		}
+		return *m, cmd
 	}
-	return *m, tea.Batch(cmds...)
+
+	m.saveState()
+	newValue, newPos := insertAtRune(m.Inputs[m.Focused].Value(), m.Inputs[m.Focused].Position(), content)
+	m.Inputs[m.Focused].SetValue(newValue)
+	m.Inputs[m.Focused].SetCursor(newPos)
+	cmd := m.startCalculation(m.Focused)
+	m.updateViewports()
+	return *m, cmd
 }
 
-// handleCalculationMessage handles calculation completion
 func (m *Model) handleCalculationMessage(msg CalculationMsg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
-
-	if msg.Index >= 0 && msg.Index < len(m.Results) {
-		// Update model state (calculation manager is already updated in AsyncCalculateCmd)
-		m.Results[msg.Index] = msg.Result
-		m.Calculating[msg.Index] = false
-		m.updateViewports()
-
-		// Trigger recalculation of dependent lines
-		for i := msg.Index + 1; i < len(m.Inputs); i++ {
-			expr := m.Inputs[i].Value()
-			if expr != "" && !m.Calculating[i] {
-				m.Calculating[i] = true
-				cmds = append(cmds, CalculateCmd(expr, m.Results, i))
-			}
-		}
+	if msg.Index < 0 || msg.Index >= len(m.Inputs) {
+		return *m, nil
 	}
-	return *m, tea.Batch(cmds...)
+	m.ensureLineSlices()
+	if msg.Gen != m.CalcGens[msg.Index] {
+		return *m, nil
+	}
+	if msg.Expr != m.Inputs[msg.Index].Value() {
+		return *m, m.startCalculation(msg.Index)
+	}
+
+	m.Results[msg.Index] = msg.Result
+	m.RawResults[msg.Index] = msg.RawResult
+	m.updateViewports()
+	return *m, m.startCalculationChain(msg.Index + 1)
 }
 
-// handleOpenCompletionsMessage handles opening the completions popup
 func (m *Model) handleOpenCompletionsMessage(msg OpenCompletionsMsg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
-
-	m.Completions = msg.Completions
-	m.LastCompletionQuery = msg.Query
-
-	if len(m.Completions) == 1 {
-		// Auto-insert single completion
-		m.insertCompletion(m.Completions[0])
-		cmds = m.triggerCalculationIfNeeded()
-	} else if len(m.Completions) > 1 {
-		m.ShowCompletions = true
-		m.SelectedCompletion = 0
-		m.updateViewports()
-	}
-
-	return *m, tea.Batch(cmds...)
-}
-
-// handleFilterCompletionsMessage handles filtering completions
-func (m *Model) handleFilterCompletionsMessage(msg FilterCompletionsMsg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
-
 	m.Completions = msg.Completions
 	m.LastCompletionQuery = msg.Query
 
 	if len(m.Completions) == 0 {
 		m.ShowCompletions = false
-	} else if len(m.Completions) == 1 {
-		// Auto-insert single filtered completion
-		m.insertCompletion(m.Completions[0])
+		m.updateViewports()
+		return *m, nil
+	}
+
+	m.ShowCompletions = true
+	m.SelectedCompletion = 0
+	m.updateViewports()
+	return *m, nil
+}
+
+func (m *Model) handleFilterCompletionsMessage(msg FilterCompletionsMsg) (tea.Model, tea.Cmd) {
+	m.Completions = msg.Completions
+	m.LastCompletionQuery = msg.Query
+
+	if len(m.Completions) == 0 {
 		m.ShowCompletions = false
-		m.LastCompletionQuery = ""
-		cmds = m.triggerCalculationIfNeeded()
-	} else {
-		// Keep selection within bounds
-		if m.SelectedCompletion >= len(m.Completions) {
-			m.SelectedCompletion = len(m.Completions) - 1
-		}
+	} else if m.SelectedCompletion >= len(m.Completions) {
+		m.SelectedCompletion = len(m.Completions) - 1
 	}
 
 	m.updateViewports()
-	return *m, tea.Batch(cmds...)
+	return *m, nil
 }
 
-// handleMouseMessage handles mouse interactions
 func (m *Model) handleMouseMessage(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
-
-	// Handle mouse scroll in help popup
 	if m.ShowHelp {
 		switch msg.Type {
 		case tea.MouseWheelUp:
-			m.HelpViewport.LineUp(3) // Scroll up 3 lines
+			m.HelpViewport.LineUp(3)
 			return *m, nil
 		case tea.MouseWheelDown:
-			m.HelpViewport.LineDown(3) // Scroll down 3 lines
+			m.HelpViewport.LineDown(3)
 			return *m, nil
 		}
 	}
 
-	if msg.Type == tea.MouseLeft {
-		// Check if click is in result pane area
-		resultPaneStart := int(float64(m.Width) * 0.7)
-		if msg.X >= resultPaneStart && msg.Y >= 1 && msg.Y <= m.Height-2 {
-			// Calculate which result line was clicked (accounting for viewport offset)
-			clickedLine := msg.Y - 1 + m.ResultViewport.YOffset
-			if clickedLine >= 0 && clickedLine < len(m.Results) && m.Results[clickedLine] != "" {
-				// Save state before inserting ans reference
-				m.saveState()
-				
-				// Insert ans reference at current cursor position
-				ansRef := fmt.Sprintf("ans%d", clickedLine+1)
+	if msg.Type != tea.MouseLeft {
+		return *m, nil
+	}
 
-				currentValue := m.Inputs[m.Focused].Value()
-				cursorPos := m.Inputs[m.Focused].Position()
-				newValue := currentValue[:cursorPos] + ansRef + currentValue[cursorPos:]
-				m.Inputs[m.Focused].SetValue(newValue)
-				m.Inputs[m.Focused].SetCursor(cursorPos + len(ansRef))
+	resultPaneStart := int(float64(m.Width) * 0.7)
+	if msg.X >= resultPaneStart && msg.Y >= 1 && msg.Y <= m.Height-2 {
+		clickedLine := msg.Y - 1 + m.ResultViewport.YOffset
+		if clickedLine >= 0 && clickedLine < len(m.Results) && m.Results[clickedLine] != "" {
+			m.saveState()
+			ansRef := fmt.Sprintf("ans%d", clickedLine+1)
+			newValue, newPos := insertAtRune(m.Inputs[m.Focused].Value(), m.Inputs[m.Focused].Position(), ansRef)
+			m.Inputs[m.Focused].SetValue(newValue)
+			m.Inputs[m.Focused].SetCursor(newPos)
+			cmd := m.startCalculation(m.Focused)
+			m.updateViewports()
+			return *m, cmd
+		}
+		return *m, nil
+	}
 
-				// Trigger async recalculation for current and dependent lines
-				currentExpr := m.Inputs[m.Focused].Value()
-				if !m.Calculating[m.Focused] && currentExpr != "" {
-					m.Calculating[m.Focused] = true
-					cmds = append(cmds, CalculateCmd(currentExpr, m.Results, m.Focused))
-				}
-				m.updateViewports()
+	if msg.X < resultPaneStart && msg.Y >= 1 && msg.Y <= m.Height-2 {
+		clickedLine := msg.Y - 1 + m.InputViewport.YOffset
+		if clickedLine >= 0 && clickedLine < len(m.Inputs) {
+			m.focusLine(clickedLine)
+
+			const gutterWidth = 4
+			inputValue := m.Inputs[m.Focused].Value()
+			if msg.X >= gutterWidth {
+				clickPos := runeIndexAtVisual(inputValue, msg.X-gutterWidth)
+				m.Inputs[m.Focused].SetCursor(clickPos)
+			} else {
+				m.Inputs[m.Focused].CursorEnd()
 			}
-		} else if msg.X < resultPaneStart && msg.Y >= 1 && msg.Y <= m.Height-2 {
-			// Check if click is in input pane area
-			clickedLine := msg.Y - 1 + m.InputViewport.YOffset
-			if clickedLine >= 0 && clickedLine < len(m.Inputs) {
-				// Change focus to clicked line
-				m.Inputs[m.Focused].Blur()
-				m.Focused = clickedLine
-				m.Inputs[m.Focused].Focus()
-				
-				// Calculate cursor position based on click location
-				// The gutter has: line number (2 chars) + "│" (1 char) + " " (1 char) = 4 base chars
-				gutterWidth := 4
-				inputValue := m.Inputs[m.Focused].Value()
-				
-				if msg.X >= gutterWidth {
-					// Click is in the input area, calculate position
-					// Subtract 2 to account for cursor being offset to the right
-					clickPos := msg.X - gutterWidth - 2
-					
-					// Clamp to valid cursor positions (0 to length of input)
-					if clickPos >= len(inputValue) {
-						// Click beyond input text, place cursor at end
-						m.Inputs[m.Focused].SetCursor(len(inputValue))
-					} else if clickPos < 0 {
-						// Safety check, place cursor at start
-						m.Inputs[m.Focused].SetCursor(0)
-					} else {
-						// Click within input text, place cursor at click position
-						m.Inputs[m.Focused].SetCursor(clickPos)
-					}
-				} else {
-					// Click in gutter area, place cursor at end of line
-					m.Inputs[m.Focused].SetCursor(len(inputValue))
-				}
-				
-				m.updateViewports()
-				m.scrollToFocused()
-			}
+
+			m.updateViewports()
+			m.scrollToFocused()
 		}
 	}
 
-	return *m, tea.Batch(cmds...)
+	return *m, nil
 }
 
-// handleKeyMessage handles keyboard input
-func (m *Model) handleKeyMessage(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
-
-	// Handle completions first
+func (m *Model) handleKeyMessage(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	if m.ShowCompletions {
-		return m.handleCompletionKeys(msg)
+		model, cmd := m.handleCompletionKeys(msg)
+		return model, cmd, true
 	}
-
-	// Handle help popup first
 	if m.ShowHelp {
-		return m.handleHelpKeys(msg)
+		model, cmd := m.handleHelpKeys(msg)
+		return model, cmd, true
 	}
-
-	// Handle go-to-line dialog
 	if m.ShowGoToLine {
-		return m.handleGoToLineKeys(msg)
+		model, cmd := m.handleGoToLineKeys(msg)
+		return model, cmd, true
 	}
 
 	switch msg.Type {
 	case tea.KeyEsc, tea.KeyCtrlC:
-		return *m, tea.Quit
-
+		return *m, tea.Quit, true
 	case tea.KeyCtrlH:
-		return m.openHelp()
-
+		model, cmd := m.openHelp()
+		return model, cmd, true
 	case tea.KeyCtrlR:
-		return m.insertSymbol("√")
-
+		model, cmd := m.insertSymbol("√")
+		return model, cmd, true
 	case tea.KeyCtrlA:
-		return m.insertSymbol("ans")
-
+		model, cmd := m.insertSymbol("ans")
+		return model, cmd, true
 	case tea.KeyCtrlT:
-		return m.pasteInputTemplate()
-
+		model, cmd := m.pasteInputTemplate()
+		return model, cmd, true
 	case tea.KeyCtrlD:
-		return m.deleteLine()
-
+		model, cmd := m.deleteLine()
+		return model, cmd, true
 	case tea.KeyCtrlN:
-		return m.clearAll()
-		
+		model, cmd := m.clearAll()
+		return model, cmd, true
 	case tea.KeyCtrlL:
-		return m.openGoToLine()
-		
+		model, cmd := m.openGoToLine()
+		return model, cmd, true
 	case tea.KeyCtrlZ:
-		// Undo
-		if m.undo() {
-			return *m, nil
-		}
-		return *m, nil
-		
+		m.undo()
+		return *m, nil, true
 	case tea.KeyCtrlY:
-		// Redo (Ctrl+Y)
-		if m.redo() {
-			return *m, nil
-		}
-		return *m, nil
-		
+		m.redo()
+		return *m, nil, true
 	case tea.KeyCtrlS:
-		// Copy result of focused line (Ctrl+S)
-		return m.copyFocusedResult()
-	}
-
-	// Handle Ctrl+P for π symbol
-	if msg.Type == tea.KeyCtrlP && !m.ShowCompletions {
-		return m.insertSymbol("π")
-	}
-
-	// Handle Ctrl+Space for content assist
-	if msg.Type == tea.KeyCtrlAt || msg.String() == "\x00" {
-		return m.showContentAssist()
-	}
-
-	switch msg.Type {
+		model, cmd := m.copyFocusedResult()
+		return model, cmd, true
+	case tea.KeyCtrlP:
+		model, cmd := m.insertSymbol("π")
+		return model, cmd, true
+	case tea.KeyCtrlAt:
+		model, cmd := m.showCompletions()
+		return model, cmd, true
 	case tea.KeyTab:
-		return m.showCompletions()
-
+		model, cmd := m.showCompletions()
+		return model, cmd, true
 	case tea.KeyBackspace:
 		if m.Inputs[m.Focused].Value() == "" && len(m.Inputs) > 1 {
-			return m.deleteLine()
+			model, cmd := m.deleteLine()
+			return model, cmd, true
 		}
-
+		return *m, nil, false
 	case tea.KeyEnter:
-		return m.createNewLine()
-
+		model, cmd := m.createNewLine()
+		return model, cmd, true
 	case tea.KeyUp:
-		return m.focusPreviousLine()
-
+		model, cmd := m.focusPreviousLine()
+		return model, cmd, true
 	case tea.KeyDown:
-		return m.focusNextLine()
-
+		model, cmd := m.focusNextLine()
+		return model, cmd, true
 	case tea.KeyPgUp:
-		return m.focusFirstLine()
-
+		model, cmd := m.focusFirstLine()
+		return model, cmd, true
 	case tea.KeyPgDown:
-		return m.focusLastLine()
+		model, cmd := m.focusLastLine()
+		return model, cmd, true
 	}
 
-	return *m, tea.Batch(cmds...)
+	if msg.String() == "\x00" {
+		model, cmd := m.showCompletions()
+		return model, cmd, true
+	}
+
+	return *m, nil, false
 }
 
-// handleCompletionKeys handles keyboard input when completions are showing
 func (m *Model) handleCompletionKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
-
 	switch msg.Type {
 	case tea.KeyEsc:
 		m.ShowCompletions = false
@@ -302,14 +224,13 @@ func (m *Model) handleCompletionKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyEnter, tea.KeyTab, tea.KeyCtrlY:
 		if len(m.Completions) > 0 && m.SelectedCompletion < len(m.Completions) {
-			// Insert selected completion
 			m.insertCompletion(m.Completions[m.SelectedCompletion])
 			m.ShowCompletions = false
 			m.LastCompletionQuery = ""
 			m.updateViewports()
-			cmds = m.triggerCalculationIfNeeded()
+			return *m, m.startCalculation(m.Focused)
 		}
-		return *m, tea.Batch(cmds...)
+		return *m, nil
 
 	case tea.KeyUp:
 		if m.SelectedCompletion > 0 {
@@ -324,101 +245,75 @@ func (m *Model) handleCompletionKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.updateViewports()
 		return *m, nil
-
-	default:
-		// Filter completions on any other key press while showing completions
-		var cmd tea.Cmd
-		m.Inputs[m.Focused], cmd = m.Inputs[m.Focused].Update(msg)
-		cmds = append(cmds, cmd)
-
-		// Re-filter completions based on new input
-		currentValue := m.Inputs[m.Focused].Value()
-		cursorPos := m.Inputs[m.Focused].Position()
-
-		// Get current word being typed
-		wordStart := cursorPos
-		for wordStart > 0 && currentValue[wordStart-1] != ' ' && !slices.Contains(operators, string(currentValue[wordStart-1])) {
-			wordStart--
-		}
-		currentWord := currentValue[wordStart:cursorPos]
-
-		// Only re-filter if query changed
-		if currentWord != m.LastCompletionQuery {
-			cmds = append(cmds, FilterCompletionsCmd(currentWord, m.Results))
-		}
-
-		// Trigger calculation
-		currentExpr := m.Inputs[m.Focused].Value()
-		if !m.Calculating[m.Focused] && currentExpr != "" {
-			m.Calculating[m.Focused] = true
-			cmds = append(cmds, CalculateCmd(currentExpr, m.Results, m.Focused))
-		} else if currentExpr == "" {
-			// Clear result when input is empty
-			m.Results[m.Focused] = ""
-			m.updateViewports()
-		}
-
-		return *m, tea.Batch(cmds...)
 	}
+
+	var cmd tea.Cmd
+	m.Inputs[m.Focused], cmd = m.Inputs[m.Focused].Update(msg)
+
+	currentValue := m.Inputs[m.Focused].Value()
+	currentWord := currentWordAt(currentValue, m.Inputs[m.Focused].Position())
+
+	var cmds []tea.Cmd
+	if cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	if currentWord != m.LastCompletionQuery {
+		cmds = append(cmds, FilterCompletionsCmd(currentWord, m.Results))
+	}
+	cmds = append(cmds, m.startCalculation(m.Focused))
+	return *m, tea.Batch(cmds...)
 }
 
-// handleHelpKeys handles keyboard input when help is showing
 func (m *Model) handleHelpKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyCtrlC:
 		return *m, tea.Quit
-
 	case tea.KeyEsc:
 		m.ShowHelp = false
-		return *m, func() tea.Msg { return nil }
-
+		return *m, nil
 	case tea.KeyUp:
 		m.HelpViewport.LineUp(1)
-		return *m, func() tea.Msg { return nil }
-
+		return *m, nil
 	case tea.KeyDown:
 		m.HelpViewport.LineDown(1)
-		return *m, func() tea.Msg { return nil }
-
+		return *m, nil
 	case tea.KeyPgUp:
 		m.HelpViewport.HalfViewUp()
-		return *m, func() tea.Msg { return nil }
-
+		return *m, nil
 	case tea.KeyPgDown:
 		m.HelpViewport.HalfViewDown()
-		return *m, func() tea.Msg { return nil }
+		return *m, nil
 	}
 
-	// Handle vim-style navigation and quit keys
 	switch msg.String() {
 	case "j":
 		m.HelpViewport.LineDown(1)
-		return *m, func() tea.Msg { return nil }
 	case "k":
 		m.HelpViewport.LineUp(1)
-		return *m, func() tea.Msg { return nil }
 	case "q":
 		m.ShowHelp = false
-		return *m, func() tea.Msg { return nil }
 	}
-
-	// Don't pass any other keys to prevent them from affecting the main application
-	return *m, func() tea.Msg { return nil }
+	return *m, nil
 }
 
-// handleGoToLineKeys handles keyboard input when go-to-line dialog is showing
 func (m *Model) handleGoToLineKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc:
 		return m.cancelGoToLine()
-		
 	case tea.KeyEnter:
 		return m.goToLine()
-		
 	default:
-		// Update the go-to-line input with the key
 		var cmd tea.Cmd
 		m.GoToLineInput, cmd = m.GoToLineInput.Update(msg)
 		return *m, cmd
 	}
+}
+
+func containsNewline(s string) bool {
+	for _, r := range s {
+		if r == '\n' || r == '\r' {
+			return true
+		}
+	}
+	return false
 }

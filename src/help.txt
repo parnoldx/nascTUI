@@ -9,7 +9,8 @@ KEYBOARD SHORTCUTS:
 
   Tab           Show completion popup
   Ctrl+Space    Show completion popup
-  Ctrl+L        GoTo line
+  Ctrl+L        Go to line
+  Ctrl+T        Insert example sheet
   Ctrl+P        Insert π symbol
   Ctrl+R        Insert √ symbol
   Ctrl+A        Insert "ans" (Last Answer)

@@ -2,47 +2,40 @@ package main
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 )
 
-
-// styleAnsTokens applies styling to ans tokens in text
 func (m Model) styleAnsTokens(text string) string {
-	// Style ans1, ans2, etc. with highlight color
-	for i := 1; i <= len(m.Results); i++ {
+	styled := text
+	for i := len(m.Results); i >= 1; i-- {
 		ansToken := fmt.Sprintf("ans%d", i)
-		if strings.Contains(text, ansToken) {
+		if strings.Contains(styled, ansToken) {
 			styledToken := lipgloss.NewStyle().
 				Foreground(m.Theme.ansColor).
 				Bold(true).
 				Render(ansToken)
-			text = strings.ReplaceAll(text, ansToken, styledToken)
+			styled = strings.ReplaceAll(styled, ansToken, styledToken)
 		}
 	}
 
-	// Style standalone 'ans' with highlight color using word boundary
-	ansRegex := regexp.MustCompile(`\bans\b`)
-	if ansRegex.MatchString(text) {
+	if ansWordRegex.MatchString(stripANSIEscapeCodes(styled)) {
 		styledAns := lipgloss.NewStyle().
 			Foreground(m.Theme.ansColor).
 			Bold(true).
 			Render("ans")
-		text = ansRegex.ReplaceAllString(text, styledAns)
+		styled = ansWordRegex.ReplaceAllString(styled, styledAns)
 	}
 
-	return text
+	return styled
 }
 
-// updateViewports updates both input and result viewport content
 func (m *Model) updateViewports() {
 	m.updateInputViewport()
 	m.updateResultViewport()
 }
 
-// updateInputViewport updates the input pane content with line number gutter
 func (m *Model) updateInputViewport() {
 	var inputLines []string
 	for i, input := range m.Inputs {
@@ -51,100 +44,69 @@ func (m *Model) updateInputViewport() {
 			line = input.Placeholder
 		}
 
-		// Create gutter with line number and separator
-		gutter := fmt.Sprintf("%2d│", i+1)
+		gutterPlain := fmt.Sprintf("%2d│", i+1)
+		gutterStyle := lipgloss.NewStyle().Foreground(m.Theme.gutterColor)
 		if i == m.Focused {
-			gutter = lipgloss.NewStyle().
+			gutterStyle = lipgloss.NewStyle().
 				Foreground(m.Theme.focusedColor).
-				Bold(true).
-				Render(gutter)
+				Bold(true)
+		}
+		gutter := gutterStyle.Render(gutterPlain)
 
-			// Style ans/res tokens with boxes and let textinput handle its own width
-			inputView := input.View()
-			inputView = m.styleAnsTokens(inputView)
-			
-			// Don't constrain the input view - let it handle its own scrolling
+		if i == m.Focused {
+			inputView := m.styleAnsTokens(input.View())
 			combined := lipgloss.JoinHorizontal(lipgloss.Top, gutter, " ", inputView)
-
-			// Add completion popup after focused line if showing completions
 			inputLines = append(inputLines, combined)
 			if m.ShowCompletions && len(m.Completions) > 0 {
-				completionLines := m.renderCompletionPopup()
-				inputLines = append(inputLines, completionLines...)
+				inputLines = append(inputLines, m.renderCompletionPopup()...)
 			}
-		} else {
-			// Replace ans tokens with highlighted actual values on non-focused lines
-			displayLine := m.replaceAnsTokensWithValues(line, i)
-			
-			// Simple truncation for non-focused lines to prevent layout issues
-			maxDisplayWidth := m.GetTextInputWidth()
-			if lipgloss.Width(displayLine) > maxDisplayWidth {
-				plainText := stripANSIEscapeCodes(displayLine)
-				if len(plainText) > maxDisplayWidth-3 {
-					displayLine = plainText[:maxDisplayWidth-3] + "..."
-				}
-			}
-			
-			// Don't style non-focused gutters - use default colors
-			combined := lipgloss.JoinHorizontal(lipgloss.Top, gutter, " ", displayLine)
-			inputLines = append(inputLines, combined)
+			continue
 		}
+
+		displayLine := m.replaceAnsTokensWithValues(line, i)
+		maxDisplayWidth := m.GetTextInputWidth()
+		if lipgloss.Width(displayLine) > maxDisplayWidth {
+			displayLine = truncateVisual(displayLine, maxDisplayWidth)
+		}
+		combined := lipgloss.JoinHorizontal(lipgloss.Top, gutter, " ", displayLine)
+		inputLines = append(inputLines, combined)
 	}
 	m.InputViewport.SetContent(strings.Join(inputLines, "\n"))
 }
 
-// updateResultViewport updates the results pane content
 func (m *Model) updateResultViewport() {
 	var resultLines []string
+	resultWidth := m.ResultViewport.Width
+	if resultWidth <= 0 {
+		resultWidth = 20
+	}
+
 	for i := range m.Inputs {
 		result := m.Results[i]
-		
-		// Simple truncation for results to prevent layout issues (same as input lines)
-		maxResultWidth := m.ResultViewport.Width
-		if maxResultWidth <= 0 {
-			maxResultWidth = 20 // Fallback width
-		}
-		
-		// First strip any existing ANSI codes to get plain text for length calculation
-		plainResult := stripANSIEscapeCodes(result)
-		if len(plainResult) > maxResultWidth {
-			result = plainResult[:maxResultWidth] + "…"
+		if lipgloss.Width(result) > resultWidth {
+			result = truncateVisual(result, resultWidth)
 		}
 
-		// Get result width for padding
-		resultWidth := m.ResultViewport.Width
-		if resultWidth <= 0 {
-			resultWidth = 20 // Minimum fallback width
-		}
-		
+		style := lipgloss.NewStyle().Foreground(m.Theme.resultColor)
 		if i == m.Focused {
-			result = lipgloss.NewStyle().
+			style = lipgloss.NewStyle().
 				Foreground(m.Theme.focusedColor).
-				Bold(true).
-				Render(result)
-		} else {
-			result = lipgloss.NewStyle().
-				Render(result)
+				Bold(true)
 		}
-		
-		// Pad with spaces to fill viewport width and maintain layout
-		resultVisualWidth := lipgloss.Width(result)
-		if resultVisualWidth < resultWidth {
-			result += strings.Repeat(" ", resultWidth-resultVisualWidth)
-		}
-		
+		result = padOrTrimVisual(style.Render(result), resultWidth)
 		resultLines = append(resultLines, result)
 
-		// Add empty lines to match completion popup height
 		if i == m.Focused && m.ShowCompletions && len(m.Completions) > 0 {
-			popupHeight := len(m.Completions) + 2 // Account for border
+			popupHeight := len(m.Completions) + 2
+			if popupHeight > 12 {
+				popupHeight = 12
+			}
 			for j := 0; j < popupHeight; j++ {
 				resultLines = append(resultLines, "")
 			}
 		}
 	}
-	
-	// Only update result viewport if content actually changed
+
 	newContent := strings.Join(resultLines, "\n")
 	if newContent != m.LastResultContent {
 		m.ResultViewport.SetContent(newContent)
@@ -152,19 +114,15 @@ func (m *Model) updateResultViewport() {
 	}
 }
 
-// renderCompletionPopup creates the completion popup lines
 func (m *Model) renderCompletionPopup() []string {
 	var completionItems []string
 	maxWidth := 0
 
-	// Implement scrolling window for completions
 	maxItems := 10
 	startIdx := 0
 	endIdx := len(m.Completions)
 
-	// Calculate scrolling window if there are more than maxItems
 	if len(m.Completions) > maxItems {
-		// Center the selected item in the visible window
 		startIdx = m.SelectedCompletion - maxItems/2
 		if startIdx < 0 {
 			startIdx = 0
@@ -186,139 +144,120 @@ func (m *Model) renderCompletionPopup() []string {
 			maxWidth = len(completion)
 		}
 
-		// Adjust index for scrolled window
 		globalIdx := startIdx + j
 		if globalIdx == m.SelectedCompletion {
 			item := lipgloss.NewStyle().
 				Foreground(m.Theme.focusedColor).
-				Background(lipgloss.Color("8")).
+				Background(m.Theme.completionSelBg).
 				Bold(true).
 				Render("▶ " + completion)
 			completionItems = append(completionItems, item)
 		} else {
 			item := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("7")).
+				Foreground(m.Theme.completionFg).
 				Render("  " + completion)
 			completionItems = append(completionItems, item)
 		}
 	}
 
 	completionContent := strings.Join(completionItems, "\n")
-	popupWidth := maxWidth + 4 // Add padding
+	popupWidth := maxWidth + 4
 	if popupWidth < 20 {
 		popupWidth = 20
 	} else if popupWidth > 40 {
 		popupWidth = 40
 	}
 
-	completionStyle := lipgloss.NewStyle().
+	popup := lipgloss.NewStyle().
 		Width(popupWidth).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(m.Theme.borderColor).
-		Background(lipgloss.Color("0")).
+		Background(m.Theme.popupBg).
 		Padding(0, 1).
-		MarginLeft(6) // Indent to align with input content
-
-	popup := completionStyle.Render(completionContent)
+		MarginLeft(6).
+		Render(completionContent)
 	return strings.Split(popup, "\n")
 }
 
-// replaceAnsTokensWithValues replaces ans tokens with actual values for display
 func (m *Model) replaceAnsTokensWithValues(line string, currentIndex int) string {
 	displayLine := line
 	var commentPart string
 
-	// Split at comment boundary
 	if commentPos := strings.Index(displayLine, "//"); commentPos != -1 {
 		commentPart = displayLine[commentPos:]
 		displayLine = displayLine[:commentPos]
 	}
 
-	for j := 0; j < currentIndex && j < len(m.Results); j++ {
-		if m.Results[j] != "" {
-			ansPattern := fmt.Sprintf("ans%d", j+1)
-			if strings.Contains(displayLine, ansPattern) {
-				styledValue := lipgloss.NewStyle().
-					Foreground(m.Theme.ansColor).
-					Bold(true).
-					Render(m.Results[j])
-				displayLine = strings.ReplaceAll(displayLine, ansPattern, styledValue)
-			}
+	matches := ansNumRegex.FindAllStringSubmatchIndex(displayLine, -1)
+	type repl struct {
+		start, end int
+		value      string
+	}
+	var repls []repl
+	for _, loc := range matches {
+		n := 0
+		fmt.Sscanf(displayLine[loc[2]:loc[3]], "%d", &n)
+		idx := n - 1
+		if idx < 0 || idx >= currentIndex || idx >= len(m.Results) || m.Results[idx] == "" {
+			continue
 		}
+		repls = append(repls, repl{loc[0], loc[1], m.Results[idx]})
+	}
+	for i := len(repls) - 1; i >= 0; i-- {
+		r := repls[i]
+		styledValue := lipgloss.NewStyle().
+			Foreground(m.Theme.ansColor).
+			Bold(true).
+			Render(r.value)
+		displayLine = displayLine[:r.start] + styledValue + displayLine[r.end:]
 	}
 
-	// Replace standalone 'ans' with highlighted last result
-	ansRegex := regexp.MustCompile(`\bans\b`)
-	if ansRegex.MatchString(displayLine) {
+	if ansWordRegex.MatchString(displayLine) {
 		for j := currentIndex - 1; j >= 0; j-- {
 			if m.Results[j] != "" {
 				styledValue := lipgloss.NewStyle().
 					Foreground(m.Theme.ansColor).
 					Bold(true).
 					Render(m.Results[j])
-				displayLine = ansRegex.ReplaceAllString(displayLine, styledValue)
+				displayLine = ansWordRegex.ReplaceAllString(displayLine, styledValue)
 				break
 			}
 		}
 	}
 
-	// Rejoin with comment part
 	return displayLine + commentPart
 }
 
-
-// stripANSIEscapeCodes removes ANSI escape codes from text to get plain length
-func stripANSIEscapeCodes(text string) string {
-	// Simple regex to remove ANSI escape sequences
-	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*m`)
-	return ansiRegex.ReplaceAllString(text, "")
-}
-
-// View renders the main UI view
 func (m Model) View() string {
 	baseStyle := lipgloss.NewStyle().
-		Height(m.Height - 2).
+		Height(m.Height-2).
 		Border(lipgloss.RoundedBorder()).
 		Padding(0, 1)
 
-	inputStyle := baseStyle.Copy().
-		Width(int(float64(m.Width)*0.7) - 2)
+	inputStyle := baseStyle.
+		Width(int(float64(m.Width)*0.7) - 2).
+		Background(m.Theme.inputBg)
 
-	resultStyle := baseStyle.Copy().
-		Width(int(float64(m.Width)*0.3) - 2)
+	resultStyle := baseStyle.
+		Width(int(float64(m.Width)*0.3) - 2).
+		Background(m.Theme.resultBg)
 
-	// Force fixed widths to prevent layout shifts
-  	inputPane := inputStyle.Render(m.InputViewport.View())
-    resultPane := resultStyle.Render(m.ResultViewport.View())
-
+	inputPane := inputStyle.Render(m.InputViewport.View())
+	resultPane := resultStyle.Render(m.ResultViewport.View())
 	baseView := lipgloss.JoinHorizontal(lipgloss.Top, inputPane, resultPane)
 
 	if m.ShowHelp {
-		return m.renderHelpPopup()
+		return overlayCentered(baseView, m.renderHelpBox(), m.Width, m.Height)
 	}
-
 	if m.ShowGoToLine {
 		return m.renderGoToLineDialog(baseView)
 	}
-
 	return baseView
 }
 
-// renderHelpPopup renders the help popup overlay
-func (m Model) renderHelpPopup() string {
-	// Use the scrollable viewport for help content
+func (m Model) renderHelpBox() string {
 	helpContent := m.HelpViewport.View()
 
-	helpStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(m.Theme.borderColor).
-		Padding(1, 2).
-		Background(lipgloss.Color("0")).
-		Foreground(lipgloss.Color("7")).
-		Width(m.HelpViewport.Width + 4).  // Account for padding
-		Height(m.HelpViewport.Height + 4) // Account for padding
-
-	// Add title with scroll info
 	title := "NaSC (↑↓ to scroll, Esc to close)"
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
@@ -326,79 +265,95 @@ func (m Model) renderHelpPopup() string {
 		Width(m.HelpViewport.Width)
 
 	helpWithTitle := titleStyle.Render(title) + "\n\n" + helpContent
-	helpBox := helpStyle.Render(helpWithTitle)
-
-	// Center the help popup
-	overlayStyle := lipgloss.NewStyle().
-		Width(m.Width).
-		Height(m.Height).
-		Align(lipgloss.Center, lipgloss.Center)
-
-	return overlayStyle.Render(helpBox)
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.Theme.borderColor).
+		Padding(1, 2).
+		Background(m.Theme.popupBg).
+		Foreground(m.Theme.unfocusedColor).
+		Width(m.HelpViewport.Width + 4).
+		Height(m.HelpViewport.Height + 4).
+		Render(helpWithTitle)
 }
 
-// renderGoToLineDialog renders the go-to-line dialog overlay
+func overlayCentered(base, overlay string, width, height int) string {
+	baseLines := strings.Split(base, "\n")
+	for len(baseLines) < height {
+		baseLines = append(baseLines, "")
+	}
+
+	overlayLines := strings.Split(overlay, "\n")
+	ow := 0
+	for _, line := range overlayLines {
+		if w := lipgloss.Width(line); w > ow {
+			ow = w
+		}
+	}
+	oh := len(overlayLines)
+	x := (width - ow) / 2
+	y := (height - oh) / 2
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
+
+	for i, line := range overlayLines {
+		row := y + i
+		if row < 0 || row >= len(baseLines) {
+			continue
+		}
+		existing := baseLines[row]
+		prefix := padOrTrimVisual(existing, x)
+		suffixStart := x + lipgloss.Width(line)
+		suffix := ""
+		if suffixStart < lipgloss.Width(existing) {
+			suffix = visualSlice(existing, suffixStart, lipgloss.Width(existing))
+		}
+		baseLines[row] = prefix + line + suffix
+	}
+	return strings.Join(baseLines, "\n")
+}
+
 func (m Model) renderGoToLineDialog(baseView string) string {
-	// Create the go-to-line input dialog
 	dialogContent := "Go to line: " + m.GoToLineInput.View()
 	dialogBox := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(m.Theme.borderColor).
 		Padding(0, 1).
-		Background(lipgloss.Color("0")).
+		Background(m.Theme.popupBg).
 		Width(30).
 		Render(dialogContent)
 
-	// Split the base view into lines
-	baseLines := strings.Split(baseView, "\n")
-	
-	// Ensure we have enough lines for the dialog height
-	for len(baseLines) < m.Height {
+	inputPaneWidth := int(float64(m.Width) * 0.7)
+	x := inputPaneWidth/2 - 15 + 2
+	y := m.Height - 6
+	return overlayAt(baseView, dialogBox, x, y, m.Height)
+}
+
+func overlayAt(base, overlay string, x, y, height int) string {
+	baseLines := strings.Split(base, "\n")
+	for len(baseLines) < height {
 		baseLines = append(baseLines, "")
 	}
-	
-	// Calculate position for dialog (bottom center of input pane)
-	inputPaneWidth := int(float64(m.Width) * 0.7)
-	dialogY := m.Height - 6 // Position near bottom
-	dialogX := inputPaneWidth/2 - 15 + 2 // Center in input pane
-	
-	// Create the dialog lines
-	dialogLines := strings.Split(dialogBox, "\n")
-	
-	// Insert dialog into the base view at the calculated position
-	for i, dialogLine := range dialogLines {
-		lineIndex := dialogY + i
-		if lineIndex >= 0 && lineIndex < len(baseLines) {
-			existingLine := baseLines[lineIndex]
-			
-			// Get the visual width of the dialog line (without ANSI codes)
-			dialogVisualWidth := lipgloss.Width(dialogLine)
-			
-			// Preserve existing content before and after the dialog
-			prefix := ""
-			suffix := ""
-			
-			// Extract prefix (content before dialog position)
-			if dialogX > 0 && len(existingLine) > dialogX {
-				// Get visual characters up to dialog position, preserving ANSI codes
-				prefix = existingLine[:min(len(existingLine), dialogX)]
-			} else if dialogX > 0 {
-				// Pad if line is shorter than dialog position
-				prefix = existingLine + strings.Repeat(" ", dialogX-lipgloss.Width(existingLine))
-			}
-			
-			// Extract suffix (content after dialog)
-			suffixStart := dialogX + dialogVisualWidth
-			if suffixStart < lipgloss.Width(existingLine) {
-				// Get remaining visual characters after dialog, preserving ANSI codes
-				remaining := existingLine[min(len(existingLine), suffixStart):]
-				suffix = remaining
-			}
-			
-			// Reconstruct line: prefix + dialog + suffix
-			baseLines[lineIndex] = prefix + dialogLine + suffix
-		}
+	if x < 0 {
+		x = 0
 	}
-	
+
+	for i, line := range strings.Split(overlay, "\n") {
+		row := y + i
+		if row < 0 || row >= len(baseLines) {
+			continue
+		}
+		existing := baseLines[row]
+		prefix := padOrTrimVisual(existing, x)
+		suffixStart := x + lipgloss.Width(line)
+		suffix := ""
+		if suffixStart < lipgloss.Width(existing) {
+			suffix = visualSlice(existing, suffixStart, lipgloss.Width(existing))
+		}
+		baseLines[row] = prefix + line + suffix
+	}
 	return strings.Join(baseLines, "\n")
 }
