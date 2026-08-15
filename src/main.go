@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strings"
 
@@ -20,13 +19,14 @@ const defaultPlaceholder = "Press Ctrl+H for help"
 type Model struct {
 	Inputs              []textinput.Model
 	Results             []string
+	RawResults          []string
 	Focused             int
 	Width               int
 	Height              int
 	InputViewport       viewport.Model
 	ResultViewport      viewport.Model
 	Theme               Theme
-	Calculating         []bool
+	CalcGens            []int
 	ShowCompletions     bool
 	Completions         []string
 	SelectedCompletion  int
@@ -39,43 +39,42 @@ type Model struct {
 	LastResultContent   string
 }
 
-func (m Model) GetTextInputWidth() int {
-	width := int(float64(m.Width)*0.7) - 6 - 3 // -3 for early scrolling
+func textInputWidth(termWidth int) int {
+	width := int(float64(termWidth)*0.7) - 6 - 3 // -3 for early scrolling
 	if width < 1 {
 		return 1
 	}
 	return width
 }
 
-func GetTextInputWidth(width int) int {
-	calcWidth := int(float64(width)*0.7) - 6 - 3 // -3 for early scrolling
-	if calcWidth < 1 {
-		return 1
-	}
-	return calcWidth
+func (m Model) GetTextInputWidth() int {
+	return textInputWidth(m.Width)
+}
+
+func newLineInput(width int, placeholder string) textinput.Model {
+	ti := textinput.New()
+	ti.Placeholder = placeholder
+	ti.Width = width
+	ti.Prompt = ""
+	ti.CharLimit = 0
+	return ti
 }
 
 func InitialModel() Model {
 	terminalWidth, terminalHeight, _ := term.GetSize(int(os.Stdout.Fd()))
 
-	ti := textinput.New()
-	ti.Placeholder = defaultPlaceholder
+	ti := newLineInput(textInputWidth(terminalWidth), defaultPlaceholder)
 	ti.Focus()
-	ti.Width = GetTextInputWidth(terminalWidth)
-	ti.Prompt = ""
-	ti.CharLimit = 0
 
 	inputVp := viewport.New(int(float64(terminalWidth)*0.7)-2, terminalHeight-2)
 	resultVp := viewport.New(int(float64(terminalWidth)*0.3)-2, terminalHeight-2)
 	helpVp := viewport.New(0, 0)
 
-	// Initialize go-to-line input
 	gotoInput := textinput.New()
 	gotoInput.Placeholder = ""
 	gotoInput.Width = 20
-	gotoInput.CharLimit = 5 // Max 5 digits should be enough
+	gotoInput.CharLimit = 5
 	gotoInput.Validate = func(s string) error {
-		// Only allow digits
 		for _, r := range s {
 			if r < '0' || r > '9' {
 				return fmt.Errorf("only numbers allowed")
@@ -87,7 +86,8 @@ func InitialModel() Model {
 	return Model{
 		Inputs:         []textinput.Model{ti},
 		Results:        []string{""},
-		Calculating:    []bool{false},
+		RawResults:     []string{""},
+		CalcGens:       []int{0},
 		Focused:        0,
 		Width:          terminalWidth,
 		Height:         terminalHeight,
@@ -102,13 +102,16 @@ func InitialModel() Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(textinput.Blink, func() tea.Msg { return tickMsg{} })
+	// Kick off calculations from Update so generation counters land on the live model.
+	return tea.Batch(textinput.Blink, func() tea.Msg { return kickoffMsg{} })
 }
 
 func readStdin() string {
-	stat, _ := os.Stdin.Stat()
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		return ""
+	}
 	if (stat.Mode() & os.ModeCharDevice) == 0 {
-		// Data is being piped
 		reader := bufio.NewReader(os.Stdin)
 		input, err := io.ReadAll(reader)
 		if err == nil {
@@ -118,69 +121,131 @@ func readStdin() string {
 	return ""
 }
 
-// Add multiple inputs to existing ones
-func (m *Model) addMultipleInputs(content string) {
-	if content == "" {
-		return
-	}
-
-	// Save state before making changes (only if we actually have content to add)
-	m.saveState()
-
-	lines := strings.Split(strings.TrimSpace(content), "\n")
-
-	for _, line := range lines {
-		// Trim whitespace but keep the line content
-		line = strings.TrimSpace(line)
-
-		// Skip empty lines
-		if line == "" {
-			continue
-		}
-
-		newInput := textinput.New()
-		newInput.Placeholder = ""
-		newInput.Width = m.GetTextInputWidth()
-		newInput.Prompt = ""
-		newInput.SetValue(line)
-		newInput.SetCursor(len(line))
-
-		m.Inputs = append(m.Inputs, newInput)
+func (m *Model) ensureLineSlices() {
+	n := len(m.Inputs)
+	for len(m.Results) < n {
 		m.Results = append(m.Results, "")
-		m.Calculating = append(m.Calculating, false)
-
-		index := len(m.Results) - 1
-		m.Results[index] = CalculateExpression(line, m.Results, index)
 	}
-
-	// If no inputs were added and we have no existing inputs, create default
-	if len(m.Inputs) == 0 {
-		ti := textinput.New()
-		ti.Placeholder = defaultPlaceholder
-		ti.Focus()
-		ti.Width = m.GetTextInputWidth()
-		ti.Prompt = ""
-		ti.CharLimit = 0
-
-		m.Inputs = []textinput.Model{ti}
-		m.Results = []string{""}
-		m.Calculating = []bool{false}
-		m.Focused = 0
-	} else {
-		// Focus on the last added input
-		m.Focused = len(m.Inputs) - 1
-		for i := range m.Inputs {
-			if i == m.Focused {
-				m.Inputs[i].Focus()
-				m.Inputs[i].SetCursor(len(m.Inputs[i].Value()))
-			} else {
-				m.Inputs[i].Blur()
-			}
-		}
+	for len(m.RawResults) < n {
+		m.RawResults = append(m.RawResults, "")
+	}
+	for len(m.CalcGens) < n {
+		m.CalcGens = append(m.CalcGens, 0)
+	}
+	if len(m.Results) > n {
+		m.Results = m.Results[:n]
+	}
+	if len(m.RawResults) > n {
+		m.RawResults = m.RawResults[:n]
+	}
+	if len(m.CalcGens) > n {
+		m.CalcGens = m.CalcGens[:n]
 	}
 }
 
-var version = "dev" // Will be set at build time
+func (m *Model) appendLine(value string) int {
+	ti := newLineInput(m.GetTextInputWidth(), "")
+	ti.SetValue(value)
+	ti.CursorEnd()
+	m.Inputs = append(m.Inputs, ti)
+	m.Results = append(m.Results, "")
+	m.RawResults = append(m.RawResults, "")
+	m.CalcGens = append(m.CalcGens, 0)
+	return len(m.Inputs) - 1
+}
+
+func (m *Model) focusLine(index int) {
+	if len(m.Inputs) == 0 {
+		return
+	}
+	if index < 0 {
+		index = 0
+	}
+	if index >= len(m.Inputs) {
+		index = len(m.Inputs) - 1
+	}
+	for i := range m.Inputs {
+		if i == index {
+			m.Inputs[i].Focus()
+		} else {
+			m.Inputs[i].Blur()
+		}
+	}
+	m.Focused = index
+}
+
+// addMultipleInputs appends non-empty lines. Calculations are started by the
+// returned command so Update() never blocks on libqalculate.
+func (m *Model) addMultipleInputs(content string) tea.Cmd {
+	if content == "" {
+		return nil
+	}
+
+	m.saveState()
+
+	firstNew := -1
+	for _, line := range strings.Split(strings.TrimSpace(content), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		idx := m.appendLine(line)
+		if firstNew == -1 {
+			firstNew = idx
+		}
+	}
+
+	if len(m.Inputs) == 0 {
+		ti := newLineInput(m.GetTextInputWidth(), defaultPlaceholder)
+		ti.Focus()
+		m.Inputs = []textinput.Model{ti}
+		m.Results = []string{""}
+		m.RawResults = []string{""}
+		m.CalcGens = []int{0}
+		m.Focused = 0
+		return nil
+	}
+
+	m.focusLine(len(m.Inputs) - 1)
+	if firstNew >= 0 {
+		return m.startCalculationChain(firstNew)
+	}
+	return nil
+}
+
+func (m *Model) startCalculation(index int) tea.Cmd {
+	if index < 0 || index >= len(m.Inputs) {
+		return nil
+	}
+	m.ensureLineSlices()
+
+	expr := m.Inputs[index].Value()
+	if strings.TrimSpace(expr) == "" {
+		m.Results[index] = ""
+		m.RawResults[index] = ""
+		m.CalcGens[index]++
+		return m.startCalculationChain(index + 1)
+	}
+
+	m.CalcGens[index]++
+	raw := append([]string(nil), m.RawResults...)
+	return CalculateCmd(expr, raw, index, m.CalcGens[index])
+}
+
+func (m *Model) startCalculationChain(from int) tea.Cmd {
+	for i := from; i < len(m.Inputs); i++ {
+		if strings.TrimSpace(m.Inputs[i].Value()) != "" {
+			return m.startCalculation(i)
+		}
+		if i < len(m.Results) {
+			m.Results[i] = ""
+			m.RawResults[i] = ""
+		}
+	}
+	return nil
+}
+
+var version = "dev" // set at build time via -ldflags
 
 func main() {
 	showVersion := flag.Bool("version", false, "Show version information")
@@ -192,21 +257,26 @@ func main() {
 	}
 
 	go func() {
-		if UpdateExchangeRates() {
-			log.Println("Exchange rates updated successfully")
-		}
+		_ = UpdateExchangeRates()
 	}()
 
-	// Check for piped input
 	initialInput := readStdin()
 
 	model := InitialModel()
 	if initialInput != "" {
-		model.addMultipleInputs(initialInput)
+		_ = model.addMultipleInputs(initialInput)
 	}
 
-	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
-	if err := p.Start(); err != nil {
-		fmt.Printf("Error: %v\n", err)
+	opts := []tea.ProgramOption{tea.WithAltScreen(), tea.WithMouseCellMotion()}
+	if initialInput != "" {
+		if tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0); err == nil {
+			opts = append(opts, tea.WithInput(tty))
+		}
+	}
+
+	p := tea.NewProgram(model, opts...)
+	if _, err := p.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
 	}
 }

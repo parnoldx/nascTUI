@@ -16,8 +16,9 @@ A terminal-based calculator using Charm's Bubbletea framework with libqalculate 
 - **src/ui_utils.go**: UI utilities and command functions
 - **src/undo.go**: Undo/redo system implementation
 - **src/style.go**: Theme definitions and color management
+- **src/textutil.go**: Unicode-safe string helpers and visual truncation
 - **src/calc_wrapper.cpp**: C++ wrapper for libqalculate library
-- **Makefile**: Build configuration for Arch Linux
+- **Makefile**: Build configuration
 
 ## Performance Guidelines
 Based on Bubbletea best practices from https://leg100.github.io/en/posts/building-bubbletea-programs/#keepfast:
@@ -60,6 +61,8 @@ Based on Bubbletea best practices from https://leg100.github.io/en/posts/buildin
 - **Ctrl+Z**: Undo last action
 - **Ctrl+Y**: Redo last undone action
 - **Ctrl+L**: Go to line (opens line number input dialog)
+- **Ctrl+T**: Insert the built-in example sheet
+- **Ctrl+S**: Copy the focused line's result to the clipboard
 - **Tab/Ctrl+Space**: Show completion proposals
 - **Ctrl+H**: Show help popup
 - **Esc**: Quit application (or close active popup)
@@ -75,6 +78,8 @@ Based on Bubbletea best practices from https://leg100.github.io/en/posts/buildin
 - **Ctrl+P**: Insert π symbol
 - **Ctrl+R**: Insert √ symbol
 - **Ctrl+A**: Insert "ans" (last answer reference)
+- **Ctrl+T**: Insert example expressions
+- **Ctrl+S**: Copy focused result
 
 ## Completion Proposals
 The calculator provides intelligent function and variable completion through a popup interface.
@@ -151,7 +156,7 @@ The application provides comprehensive undo/redo functionality to recover from m
   - Multi-line paste operations
   - Template insertion (Ctrl+T)
   - Result click insertions (clicking results to insert ans references)
-  - Symbol insertions (Ctrl+P for π, Ctrl+R for √, Ctrl+L for ans)
+  - Symbol insertions (Ctrl+P for π, Ctrl+R for √, Ctrl+A for ans)
   - Auto-completion insertions (Tab/Enter on completions)
 
 ### Key Bindings

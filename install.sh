@@ -333,15 +333,25 @@ install_binary() {
     temp_dir=$(mktemp -d)
 
     echo -e "${BLUE}Downloading $binary_name...${NC}"
-    if ! curl -fSL "$download_url" -o "$temp_dir/nasc" || ! is_elf "$temp_dir/nasc"; then
+    if ! curl -fSL "$download_url" -o "$temp_dir/$binary_name" || ! is_elf "$temp_dir/$binary_name"; then
         rm -rf "$temp_dir"
         echo -e "${YELLOW}Binary download failed, building from source...${NC}"
         build_from_source "$version"
         return
     fi
 
+    if curl -fSL "$download_url.sha256" -o "$temp_dir/$binary_name.sha256"; then
+        if ! (cd "$temp_dir" && sha256sum -c "$binary_name.sha256"); then
+            echo -e "${RED}Checksum verification failed${NC}"
+            rm -rf "$temp_dir"
+            exit 1
+        fi
+    else
+        echo -e "${YELLOW}No checksum published for $version, skipping verification${NC}"
+    fi
+
     local dest
-    dest=$(place_binary "$temp_dir/nasc")
+    dest=$(place_binary "$temp_dir/$binary_name")
     rm -rf "$temp_dir"
     echo -e "${GREEN}✓ Installed nasc $version → $dest${NC}"
 }

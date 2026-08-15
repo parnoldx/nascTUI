@@ -12,7 +12,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     container: archlinux:latest
-    
+
     steps:
     - uses: actions/checkout@v4
 
@@ -28,14 +28,17 @@ jobs:
     - name: Build binaries
       working-directory: ./src
       run: |
-        # Linux AMD64
-        GOOS=linux GOARCH=amd64 go build -v ./... && mv nasc ../nasc-linux-amd64
+        VERSION="${GITHUB_REF_NAME}"
+        go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o ../nasc-linux-amd64
+        cd ..
+        sha256sum nasc-linux-amd64 > nasc-linux-amd64.sha256
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
         files: |
           nasc-linux-amd64
+          nasc-linux-amd64.sha256
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
