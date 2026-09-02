@@ -1,6 +1,6 @@
 # Maintainer: parnoldx <nasc@pa.unbox.at>
 pkgname=nasctui
-pkgver=1.0.5
+pkgver=1.0.6
 pkgrel=1
 pkgdesc="Do maths like a normal person - A terminal calculator"
 arch=('x86_64' 'i686' 'aarch64')
