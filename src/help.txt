@@ -3,7 +3,8 @@ KEYBOARD SHORTCUTS:
   ↑/↓           Navigate between lines
   Enter         Add new input line
   Ctrl+D        Delete focused line
-  Ctrl+N        New calculation sheet
+  Ctrl+N        New session
+  Ctrl+O        Open session picker
   Esc           Close help / Quit app
   Ctrl+C        Quit app
 
@@ -17,6 +18,22 @@ KEYBOARD SHORTCUTS:
   Ctrl+S        Copy result of focused line
   Ctrl+Z        Undo
   Ctrl+Y        Redo
+
+SESSIONS:
+  Your sheet is saved automatically while you type and when you quit.
+  Files live in ~/.local/share/nasc-tui/sessions/ as plain text.
+
+  Ctrl+O        Open the session picker (type to filter)
+    Enter       Switch to the selected session
+    Ctrl+N      New session      Ctrl+R  Rename selected
+    Ctrl+U      Duplicate        Ctrl+D  Delete selected
+    Esc         Close the picker
+
+  nasc                  Resume the last session
+  nasc -s               Start with the session picker
+  nasc -n               Start a new session
+  nasc "taxes 2026"     Open (or create) a session by name
+  nasc --help           Print this help
 
 MOUSE INTERACTIONS:
   Click input   Focus and position cursor in line

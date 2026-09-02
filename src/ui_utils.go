@@ -1,12 +1,35 @@
 package main
 
 import (
+	"strings"
+	"time"
+
 	"github.com/charmbracelet/bubbletea"
 )
+
+const autosaveInterval = 30 * time.Second
 
 type pasteMsg string
 type pasteErrMsg struct{ err error }
 type kickoffMsg struct{}
+type autosaveMsg struct{}
+type sessionSavedMsg struct {
+	text string
+	err  error
+}
+
+func autosaveTick() tea.Cmd {
+	return tea.Tick(autosaveInterval, func(time.Time) tea.Msg {
+		return autosaveMsg{}
+	})
+}
+
+func SaveSessionCmd(name string, lines []string) tea.Cmd {
+	return func() tea.Msg {
+		err := SaveSession(name, lines)
+		return sessionSavedMsg{text: strings.Join(lines, "\n"), err: err}
+	}
+}
 
 func CalculateCmd(expr string, rawResults []string, index, gen int) tea.Cmd {
 	return func() tea.Msg {

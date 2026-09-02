@@ -37,6 +37,10 @@ type Model struct {
 	ShowGoToLine        bool
 	GoToLineInput       textinput.Model
 	LastResultContent   string
+	SessionName         string
+	LastSavedText       string
+	ShowPicker          bool
+	Picker              PickerModel
 }
 
 func textInputWidth(termWidth int) int {
@@ -98,12 +102,13 @@ func InitialModel() Model {
 		UndoSystem:     NewUndoSystem(),
 		ShowGoToLine:   false,
 		GoToLineInput:  gotoInput,
+		Picker:         newPicker(),
 	}
 }
 
 func (m Model) Init() tea.Cmd {
 	// Kick off calculations from Update so generation counters land on the live model.
-	return tea.Batch(textinput.Blink, func() tea.Msg { return kickoffMsg{} })
+	return tea.Batch(textinput.Blink, func() tea.Msg { return kickoffMsg{} }, autosaveTick())
 }
 
 func readStdin() string {
@@ -247,9 +252,92 @@ func (m *Model) startCalculationChain(from int) tea.Cmd {
 
 var version = "dev" // set at build time via -ldflags
 
+// loadSessionContent replaces the whole sheet with the stored lines. Blank lines
+// are kept so ans1/ans2 references keep pointing at the same rows.
+func (m *Model) loadSessionContent(name string, lines []string) tea.Cmd {
+	if len(lines) == 0 {
+		lines = []string{""}
+	}
+
+	width := m.GetTextInputWidth()
+	m.Inputs = make([]textinput.Model, len(lines))
+	for i, line := range lines {
+		placeholder := ""
+		if len(lines) == 1 && line == "" {
+			placeholder = defaultPlaceholder
+		}
+		ti := newLineInput(width, placeholder)
+		ti.SetValue(line)
+		m.Inputs[i] = ti
+	}
+
+	m.Results = make([]string, len(lines))
+	m.RawResults = make([]string, len(lines))
+	m.CalcGens = make([]int, len(lines))
+	m.SessionName = name
+	m.LastSavedText = strings.Join(lines, "\n")
+	m.UndoSystem = NewUndoSystem()
+
+	m.focusLine(len(m.Inputs) - 1)
+	m.Inputs[m.Focused].CursorEnd()
+	m.updateViewports()
+	m.scrollToFocused()
+	return m.startCalculationChain(0)
+}
+
+func (m Model) sessionLines() []string {
+	lines := make([]string, len(m.Inputs))
+	for i, input := range m.Inputs {
+		lines[i] = input.Value()
+	}
+	return lines
+}
+
+// saveSessionNow writes synchronously: on quit a tea.Cmd would race with tea.Quit.
+func (m *Model) saveSessionNow() {
+	if m.SessionName == "" {
+		return
+	}
+	lines := m.sessionLines()
+	if err := SaveSession(m.SessionName, lines); err == nil {
+		m.LastSavedText = strings.Join(lines, "\n")
+	}
+}
+
+func (m *Model) quit() tea.Cmd {
+	m.saveSessionNow()
+	return tea.Quit
+}
+
+// resolveStartupSession decides which session to open, creating none on disk yet.
+func resolveStartupSession(name string, wantNew bool) string {
+	if name != "" {
+		return sanitizeName(name)
+	}
+	if wantNew {
+		return NewSessionName()
+	}
+	if last, ok := LastSessionName(); ok {
+		return last
+	}
+	return NewSessionName()
+}
+
 func main() {
 	showVersion := flag.Bool("version", false, "Show version information")
+	showSessions := flag.Bool("s", false, "Open the session picker on startup")
+	newSession := flag.Bool("n", false, "Start a new session")
+	showHelp := flag.Bool("help", false, "Print the help text")
+	flag.BoolVar(showHelp, "h", false, "Print the help text")
+	flag.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: nasc [-s] [-n] [--help] [--version] [session name]")
+	}
 	flag.Parse()
+
+	if *showHelp {
+		fmt.Print(helpText)
+		return
+	}
 
 	if *showVersion {
 		fmt.Println(version)
@@ -264,7 +352,18 @@ func main() {
 
 	model := InitialModel()
 	if initialInput != "" {
+		// Piped input stays a throwaway scratch sheet and is never persisted.
 		_ = model.addMultipleInputs(initialInput)
+	} else {
+		name := resolveStartupSession(flag.Arg(0), *newSession)
+		lines, err := LoadSession(name)
+		if err != nil {
+			lines = []string{""}
+		}
+		_ = model.loadSessionContent(name, lines)
+		if *showSessions && len(ListSessions()) > 0 {
+			_, _ = model.openPicker()
+		}
 	}
 
 	opts := []tea.ProgramOption{tea.WithAltScreen(), tea.WithMouseCellMotion()}

@@ -15,6 +15,8 @@ A terminal-based calculator using Charm's Bubbletea framework with libqalculate 
 - **src/input.go**: Input processing and line management
 - **src/ui_utils.go**: UI utilities and command functions
 - **src/undo.go**: Undo/redo system implementation
+- **src/session.go**: Session storage (list, load, save, rename, duplicate, delete)
+- **src/picker.go**: Fuzzy session picker popup
 - **src/style.go**: Theme definitions and color management
 - **src/textutil.go**: Unicode-safe string helpers and visual truncation
 - **src/calc_wrapper.cpp**: C++ wrapper for libqalculate library
@@ -49,6 +51,7 @@ Based on Bubbletea best practices from https://leg100.github.io/en/posts/buildin
 - Function completion with descriptions
 - Auto-completion for functions, variables, and answer references
 - Comprehensive undo/redo system with 50-level history
+- Named sessions persisted to disk with autosave and a fuzzy picker
 
 ## Key Bindings
 
@@ -57,7 +60,8 @@ Based on Bubbletea best practices from https://leg100.github.io/en/posts/buildin
 - **Up/Down**: Navigate between lines
 - **Backspace**: Delete empty line (when multiple lines exist)
 - **Ctrl+D**: Delete line
-- **Ctrl+N**: New sheet
+- **Ctrl+N**: New session (prompts for a name)
+- **Ctrl+O**: Open the session picker
 - **Ctrl+Z**: Undo last action
 - **Ctrl+Y**: Redo last undone action
 - **Ctrl+L**: Go to line (opens line number input dialog)
@@ -168,6 +172,47 @@ The application provides comprehensive undo/redo functionality to recover from m
 - **Redo stack**: Undoing an action enables redo; new actions clear the redo stack
 - **Cursor restoration**: Undo/redo preserves exact cursor positions and focus
 - **Results restoration**: Calculated results are restored along with input text
+
+## Session Persistence
+Sheets are stored as named sessions so work survives quitting or a crash.
+
+### Storage
+- Location: `$XDG_DATA_HOME/nasc-tui/sessions/<name>.nasc` (falls back to `~/.local/share`)
+- Format: plain text, one input line per file line — nothing else
+- Blank lines are preserved on load and save; `ans1`, `ans2`, ... address lines by
+  position, so dropping a blank line would break every reference below it
+- Results are not stored; they are recalculated by the normal calculation chain on load
+- Metadata comes from the filesystem: name = file name, "last used" = modification time
+- Writes are atomic (temp file + rename), so a crash mid-write cannot truncate a session
+- An all-blank session is never created on disk
+
+### Command Line
+- `nasc`: resume the most recently used session
+- `nasc -s`: open the session picker on startup (skipped when no sessions exist yet)
+- `nasc -n`: start a new session named after today's date
+- `nasc <name>`: open, or create, a session by name
+- Piped input (`echo "2+2" | nasc`) stays a throwaway scratch sheet and is never saved
+
+### Autosave
+- A `tea.Tick` fires every 30 seconds; the sheet is written only when its text changed
+- Writing happens in a `tea.Cmd`, never in `Update()`
+- Quitting (Esc / Ctrl+C) and switching sessions save synchronously, because a command
+  would race with `tea.Quit`
+
+### Session Picker (Ctrl+O)
+Fuzzy filter over the session list, most recently used first.
+
+- **Type**: filter (subsequence match, bonuses for prefix, word starts and unbroken runs)
+- **Up/Down**: move the selection
+- **Enter**: save the current session and switch to the selected one
+- **Ctrl+N**: new session (name prompt, prefilled with today's date)
+- **Ctrl+R**: rename the selected session
+- **Ctrl+U**: duplicate the selected session (`<name> copy`, `<name> copy 2`, ...)
+- **Ctrl+D**: delete the selected session, confirmed with `y`
+- **Esc**: close the picker, or leave the name prompt
+
+Deleting the open session falls back to the next most recent one, or a new empty session.
+The name of the open session is shown in the top border of the input pane.
 
 ## Mouse Actions
 - **Click result**: Insert corresponding `ans<N>` reference at cursor

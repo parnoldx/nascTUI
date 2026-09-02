@@ -87,6 +87,21 @@ func (m *Model) clearAll() (tea.Model, tea.Cmd) {
 	return *m, textinput.Blink
 }
 
+// newSession stores the current sheet, then asks for the name of the new one.
+// Without a session (piped input) there is nothing to name, so just clear.
+func (m *Model) newSession() (tea.Model, tea.Cmd) {
+	if m.SessionName == "" {
+		return m.clearAll()
+	}
+
+	m.saveSessionNow()
+	m.ShowPicker = true
+	m.Picker.Query.SetValue("")
+	m.Picker.Selected = 0
+	m.Picker.reload()
+	return m.openNamePrompt(pickerNew, NewSessionName())
+}
+
 func (m *Model) showCompletions() (tea.Model, tea.Cmd) {
 	currentWord := currentWordAt(m.Inputs[m.Focused].Value(), m.Inputs[m.Focused].Position())
 	return *m, OpenCompletionsCmd(currentWord, m.Results)

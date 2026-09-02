@@ -23,7 +23,8 @@ NaSC is an app where you do maths like a normal person. It lets you type whateve
 **Features:**
 - 🧮 Advanced mathematical expressions and functions
 - 🔄 Real-time unit conversions
-- 📊 Multiple input lines with persistent history
+- 📊 Multiple input lines with live results
+- 🗂️ Named sessions with autosave, fuzzy switching, rename and duplicate
 - ⚡ Instant calculation results
 - 🎨 Beautiful terminal UI
 - 🔍 Auto-completion for functions and variables
@@ -62,6 +63,22 @@ Simply run the calculator:
 ```bash
 nasc
 ```
+
+Your sheet is saved automatically as you type and when you quit, so `nasc` always
+comes back with the session you last worked on. Sessions are plain text files in
+`~/.local/share/nasc-tui/sessions/`.
+
+```bash
+nasc                  # resume the last session
+nasc -s               # start with the fuzzy session picker
+nasc -n               # start a new session
+nasc "taxes 2026"     # open (or create) a session by name
+nasc --help           # print the help text
+```
+
+Press <kbd>Ctrl</kbd>+<kbd>O</kbd> inside the app to switch sessions — type to filter,
+<kbd>Enter</kbd> to open, <kbd>Ctrl</kbd>+<kbd>N</kbd> new, <kbd>Ctrl</kbd>+<kbd>R</kbd>
+rename, <kbd>Ctrl</kbd>+<kbd>U</kbd> duplicate, <kbd>Ctrl</kbd>+<kbd>D</kbd> delete.
 
 ## Contributing
 

@@ -135,6 +135,23 @@ func padOrTrimVisual(s string, width int) string {
 	return s + strings.Repeat(" ", width-w)
 }
 
+// padOrSliceVisual pads with spaces or cuts at an exact column. Unlike
+// padOrTrimVisual it never appends an ellipsis, so it is safe for the
+// background rows an overlay is drawn onto.
+func padOrSliceVisual(s string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	w := lipgloss.Width(s)
+	if w == width {
+		return s
+	}
+	if w > width {
+		return visualSlice(s, 0, width)
+	}
+	return s + strings.Repeat(" ", width-w)
+}
+
 func runeIndexAtVisual(s string, visualCol int) int {
 	if visualCol <= 0 {
 		return 0

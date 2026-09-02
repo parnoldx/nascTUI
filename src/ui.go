@@ -22,6 +22,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pasteErrMsg:
 		return m, nil
 
+	case autosaveMsg:
+		return m.handleAutosave()
+
+	case sessionSavedMsg:
+		if msg.err == nil {
+			m.LastSavedText = msg.text
+		}
+		return m, nil
+
 	case kickoffMsg:
 		cmd := m.startCalculationChain(0)
 		m.updateViewports()
@@ -37,6 +46,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleFilterCompletionsMessage(msg)
 
 	case tea.MouseMsg:
+		if m.ShowPicker {
+			return m, nil
+		}
 		return m.handleMouseMessage(msg)
 
 	case tea.WindowSizeMsg:
@@ -45,6 +57,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.ShowPicker {
+			return m.handlePickerKeys(msg)
+		}
+
 		if msg.Paste {
 			return m.handleBracketedPaste(string(msg.Runes))
 		}

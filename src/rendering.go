@@ -245,7 +245,13 @@ func (m Model) View() string {
 	inputPane := inputStyle.Render(m.InputViewport.View())
 	resultPane := resultStyle.Render(m.ResultViewport.View())
 	baseView := lipgloss.JoinHorizontal(lipgloss.Top, inputPane, resultPane)
+	if m.SessionName != "" {
+		baseView = m.overlaySessionName(baseView)
+	}
 
+	if m.ShowPicker {
+		return m.renderPicker(baseView)
+	}
 	if m.ShowHelp {
 		return overlayCentered(baseView, m.renderHelpBox(), m.Width, m.Height)
 	}
@@ -253,6 +259,15 @@ func (m Model) View() string {
 		return m.renderGoToLineDialog(baseView)
 	}
 	return baseView
+}
+
+// overlaySessionName writes the open session into the top border of the input pane.
+func (m Model) overlaySessionName(view string) string {
+	label := lipgloss.NewStyle().
+		Foreground(m.Theme.focusedColor).
+		Bold(true).
+		Render(" " + truncateVisual(m.SessionName, 30) + " ")
+	return overlayAt(view, label, 3, 0, m.Height)
 }
 
 func (m Model) renderHelpBox() string {
@@ -305,7 +320,7 @@ func overlayCentered(base, overlay string, width, height int) string {
 			continue
 		}
 		existing := baseLines[row]
-		prefix := padOrTrimVisual(existing, x)
+		prefix := padOrSliceVisual(existing, x)
 		suffixStart := x + lipgloss.Width(line)
 		suffix := ""
 		if suffixStart < lipgloss.Width(existing) {
@@ -347,7 +362,7 @@ func overlayAt(base, overlay string, x, y, height int) string {
 			continue
 		}
 		existing := baseLines[row]
-		prefix := padOrTrimVisual(existing, x)
+		prefix := padOrSliceVisual(existing, x)
 		suffixStart := x + lipgloss.Width(line)
 		suffix := ""
 		if suffixStart < lipgloss.Width(existing) {

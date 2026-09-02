@@ -2,9 +2,22 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbletea"
 )
+
+func (m *Model) handleAutosave() (tea.Model, tea.Cmd) {
+	if m.SessionName == "" {
+		return *m, autosaveTick()
+	}
+
+	lines := m.sessionLines()
+	if strings.Join(lines, "\n") == m.LastSavedText {
+		return *m, autosaveTick()
+	}
+	return *m, tea.Batch(SaveSessionCmd(m.SessionName, lines), autosaveTick())
+}
 
 func (m *Model) handlePasteMessage(content string) (tea.Model, tea.Cmd) {
 	if content == "" {
@@ -144,7 +157,10 @@ func (m *Model) handleKeyMessage(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 
 	switch msg.Type {
 	case tea.KeyEsc, tea.KeyCtrlC:
-		return *m, tea.Quit, true
+		return *m, m.quit(), true
+	case tea.KeyCtrlO:
+		model, cmd := m.openPicker()
+		return model, cmd, true
 	case tea.KeyCtrlH:
 		model, cmd := m.openHelp()
 		return model, cmd, true
@@ -161,7 +177,7 @@ func (m *Model) handleKeyMessage(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		model, cmd := m.deleteLine()
 		return model, cmd, true
 	case tea.KeyCtrlN:
-		model, cmd := m.clearAll()
+		model, cmd := m.newSession()
 		return model, cmd, true
 	case tea.KeyCtrlL:
 		model, cmd := m.openGoToLine()
@@ -267,7 +283,7 @@ func (m *Model) handleCompletionKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *Model) handleHelpKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyCtrlC:
-		return *m, tea.Quit
+		return *m, m.quit()
 	case tea.KeyEsc:
 		m.ShowHelp = false
 		return *m, nil
