@@ -177,6 +177,7 @@ func (m *Model) focusLine(index int) {
 		}
 	}
 	m.Focused = index
+	m.updateViewports()
 }
 
 // addMultipleInputs appends non-empty lines. Calculations are started by the

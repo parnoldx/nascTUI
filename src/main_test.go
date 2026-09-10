@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/bubbletea"
@@ -620,5 +621,50 @@ func TestTruncateVisual(t *testing.T) {
 	got := truncateVisual("ππππ", 3)
 	if got != "ππ…" {
 		t.Errorf("truncateVisual = %q, want %q", got, "ππ…")
+	}
+}
+
+// TestBlinkMsgReachesFocusedInput guards against Update swallowing
+// cursor.BlinkMsg again: if blink messages never reach the focused
+// textinput, the cursor never toggles (invisible / no blinking).
+func TestBlinkMsgReachesFocusedInput(t *testing.T) {
+	m := createTestModel()
+
+	// Produce a blink message addressed to this input's own cursor
+	// (id/tag must match or the cursor ignores it).
+	blinkMsg := m.Inputs[m.Focused].Cursor.BlinkCmd()()
+	if _, ok := blinkMsg.(cursor.BlinkMsg); !ok {
+		t.Fatalf("expected cursor.BlinkMsg, got %T", blinkMsg)
+	}
+
+	before := m.Inputs[m.Focused].Cursor.Blink
+	updated, _ := m.Update(blinkMsg)
+	after := updated.(Model).Inputs[m.Focused].Cursor.Blink
+
+	if after == before {
+		t.Error("blink message did not toggle cursor state; cursor will not blink")
+	}
+}
+
+// TestFocusChangeRepaintsViewport guards against moving focus without
+// refreshing the viewport, which left the cursor painted on the old line.
+func TestFocusChangeRepaintsViewport(t *testing.T) {
+	m := createTestModel()
+	m.Inputs[0].SetValue("first")
+	second := textinput.New()
+	second.Width = 40
+	m.Inputs = append(m.Inputs, second)
+	m.Results = append(m.Results, "")
+	m.RawResults = append(m.RawResults, "")
+	m.CalcGens = append(m.CalcGens, 0)
+
+	before := m.InputViewport.View()
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(Model)
+	if m.Focused != 1 {
+		t.Fatalf("focus did not move down, Focused = %d", m.Focused)
+	}
+	if m.InputViewport.View() == before {
+		t.Error("viewport content unchanged after focus change; cursor appears stuck on old line")
 	}
 }

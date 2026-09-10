@@ -80,7 +80,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.updateViewports()
 		return m, tea.Batch(cmd, inputCmd, calcCmd)
-	}
 
-	return m, nil
+	default:
+		// Blink/cursor messages must reach the textinputs or the cursor
+		// never blinks. Blurred inputs ignore them immediately.
+		var cmds []tea.Cmd
+		for i := range m.Inputs {
+			var cmd tea.Cmd
+			m.Inputs[i], cmd = m.Inputs[i].Update(msg)
+			cmds = append(cmds, cmd)
+		}
+		var cmd tea.Cmd
+		m.GoToLineInput, cmd = m.GoToLineInput.Update(msg)
+		cmds = append(cmds, cmd)
+		m.Picker.NameInput, cmd = m.Picker.NameInput.Update(msg)
+		cmds = append(cmds, cmd)
+		m.updateViewports()
+		return m, tea.Batch(cmds...)
+	}
 }
